@@ -145,11 +145,26 @@
         .ghost-btn { background: #f3f8ff; color: #355275; border: 1px solid #d3e2f3; }
         .checkbox-row { display:flex; align-items:center; gap:8px; margin-top: 10px; font-size: 12px; color: #355275; font-weight: 700; }
         .checkbox-row input { width: 16px; height: 16px; accent-color: #003A9B; }
+        .radius-badge {
+            position: absolute;
+            right: 10px;
+            bottom: 12px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid #d3e2f3;
+            border-radius: 10px;
+            box-shadow: 0 6px 14px rgba(18,34,53,0.14);
+            color: #244666;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 9px;
+        }
     </style>
 </head>
 <body>
 
 <div id="map"></div>
+<div id="radiusBadge" class="radius-badge">Ring radius basis: 15 km (fixed)</div>
 
 <div id="tablePanel" class="table-panel collapsed">
     <div class="table-panel-header">
@@ -191,6 +206,7 @@
             <option value="applyStarts">Application starts</option>
             <option value="clicks">Clicks</option>
             <option value="acr">Apply completion rate (ACR)</option>
+            <option value="spend">Spend</option>
             <option value="jobs">Job count</option>
             <option value="ctr">Click-through rate (CTR)</option>
             <option value="asr">Apply start rate (ASR)</option>
@@ -210,6 +226,12 @@
         <select id="viewModeSelector">
             <option value="total">Total</option>
             <option value="perJob">Per job</option>
+        </select>
+    </div>
+    <div style="margin-top: 10px;">
+        <label id="countryLayerLabel" for="countryLayerSelector" class="control-label">COUNTRY LAYER</label>
+        <select id="countryLayerSelector">
+            <option value="all">All countries</option>
         </select>
     </div>
     <label class="checkbox-row" for="clusterRingsToggle">
@@ -273,6 +295,7 @@
     let activeCityFilter = '';
     let uploadedJobRows = [];
     let tableSort = { key: "city", dir: "asc" };
+    let selectedCountryLayer = 'all';
     let appliedCtrFilter = { op: 'gte', value: null };
     let appliedAsrFilter = { op: 'gte', value: null };
     const gradientStops = { low: "#d93025", mid: "#f6c343", high: "#1a9850" };
@@ -284,32 +307,38 @@
         en: {
             tableTitle: "Uploaded Jobs Table", showTable: "Show Table", hideTable: "Hide Table", clearFilter: "Clear filter",
             metric: "HEATMAP METRIC", scale: "COLOR SCALE", viewMode: "VIEW MODE", ctrFilter: "CTR FILTER", asrFilter: "ASR FILTER",
-            applyFilter: "Apply CTR/ASR filter", liveCsv: "LIVE CSV UPDATE", clusterRings: "Show area heat rings"
+            applyFilter: "Apply CTR/ASR filter", liveCsv: "LIVE CSV UPDATE", clusterRings: "Show area heat rings",
+            countryLayer: "COUNTRY LAYER", allCountries: "All countries"
         },
         de: {
             tableTitle: "Hochgeladene Jobs", showTable: "Tabelle anzeigen", hideTable: "Tabelle ausblenden", clearFilter: "Filter löschen",
             metric: "HEATMAP-METRIK", scale: "FARBSKALA", viewMode: "ANSICHT", ctrFilter: "CTR-FILTER", asrFilter: "ASR-FILTER",
-            applyFilter: "CTR/ASR-Filter anwenden", liveCsv: "LIVE-CSV-UPDATE", clusterRings: "Flächen-Heat-Ringe anzeigen"
+            applyFilter: "CTR/ASR-Filter anwenden", liveCsv: "LIVE-CSV-UPDATE", clusterRings: "Flächen-Heat-Ringe anzeigen",
+            countryLayer: "LÄNDER-EBENE", allCountries: "Alle Länder"
         },
         fr: {
             tableTitle: "Tableau des emplois importés", showTable: "Afficher le tableau", hideTable: "Masquer le tableau", clearFilter: "Effacer le filtre",
             metric: "MÉTRIQUE HEATMAP", scale: "ÉCHELLE DE COULEUR", viewMode: "MODE D'AFFICHAGE", ctrFilter: "FILTRE CTR", asrFilter: "FILTRE ASR",
-            applyFilter: "Appliquer le filtre CTR/ASR", liveCsv: "MISE À JOUR CSV", clusterRings: "Afficher les anneaux de zone"
+            applyFilter: "Appliquer le filtre CTR/ASR", liveCsv: "MISE À JOUR CSV", clusterRings: "Afficher les anneaux de zone",
+            countryLayer: "COUCHE PAYS", allCountries: "Tous les pays"
         },
         es: {
             tableTitle: "Tabla de empleos cargados", showTable: "Mostrar tabla", hideTable: "Ocultar tabla", clearFilter: "Borrar filtro",
             metric: "MÉTRICA HEATMAP", scale: "ESCALA DE COLOR", viewMode: "MODO DE VISTA", ctrFilter: "FILTRO CTR", asrFilter: "FILTRO ASR",
-            applyFilter: "Aplicar filtro CTR/ASR", liveCsv: "ACTUALIZACIÓN CSV", clusterRings: "Mostrar anillos de zona"
+            applyFilter: "Aplicar filtro CTR/ASR", liveCsv: "ACTUALIZACIÓN CSV", clusterRings: "Mostrar anillos de zona",
+            countryLayer: "CAPA DE PAÍS", allCountries: "Todos los países"
         },
         it: {
             tableTitle: "Tabella lavori caricati", showTable: "Mostra tabella", hideTable: "Nascondi tabella", clearFilter: "Cancella filtro",
             metric: "METRICA HEATMAP", scale: "SCALA COLORE", viewMode: "MODALITÀ VISTA", ctrFilter: "FILTRO CTR", asrFilter: "FILTRO ASR",
-            applyFilter: "Applica filtro CTR/ASR", liveCsv: "AGGIORNAMENTO CSV", clusterRings: "Mostra anelli area"
+            applyFilter: "Applica filtro CTR/ASR", liveCsv: "AGGIORNAMENTO CSV", clusterRings: "Mostra anelli area",
+            countryLayer: "LIVELLO PAESE", allCountries: "Tutti i paesi"
         },
         nl: {
             tableTitle: "Geüploade vacatures", showTable: "Tabel tonen", hideTable: "Tabel verbergen", clearFilter: "Filter wissen",
             metric: "HEATMAP-METRIEK", scale: "KLEURSCHAAL", viewMode: "WEERGAVE", ctrFilter: "CTR-FILTER", asrFilter: "ASR-FILTER",
-            applyFilter: "CTR/ASR-filter toepassen", liveCsv: "LIVE CSV-UPDATE", clusterRings: "Toon gebieds-ringen"
+            applyFilter: "CTR/ASR-filter toepassen", liveCsv: "LIVE CSV-UPDATE", clusterRings: "Toon gebieds-ringen",
+            countryLayer: "LAND-LAAG", allCountries: "Alle landen"
         }
     };
     const tableHeaderI18n = {
@@ -335,12 +364,13 @@
         applyStarts: { label: "Application starts", formatter: (v) => `${Math.round(v)}` },
         clicks: { label: "Clicks", formatter: (v) => `${Math.round(v)}` },
         acr: { label: "Apply completion rate", formatter: (v) => `${(v * 100).toFixed(2)}%` },
+        spend: { label: "Spend", formatter: (v) => `€${Number(v || 0).toFixed(2)}` },
         jobs: { label: "Job count", formatter: (v) => `${Math.round(v)}` },
         ctr: { label: "Click-through rate", formatter: (v) => `${(v * 100).toFixed(2)}%` },
         asr: { label: "Apply start rate", formatter: (v) => `${(v * 100).toFixed(2)}%` },
         intent: { label: "Traffic intent", formatter: (v) => `${(v * 100).toFixed(2)}%` }
     };
-    const metricOptionOrder = ['apps', 'applyStarts', 'clicks', 'acr', 'jobs', 'ctr', 'asr', 'intent'];
+    const metricOptionOrder = ['apps', 'applyStarts', 'clicks', 'acr', 'spend', 'jobs', 'ctr', 'asr', 'intent'];
 
     // Default data
     let campaignData = [
@@ -370,10 +400,6 @@
             // Background map click should only collapse the table, not clear the active city filter.
             setTableCollapsed(true);
         });
-        map.on('zoomend', () => {
-            if (!showClusterRings) return;
-            renderClusterRings(lastRingData, lastRingScale);
-        });
         campaignData = campaignData.map(enrichLocationMetrics);
         seedDefaultTableRows();
         renderMarkers();
@@ -383,6 +409,7 @@
         document.getElementById('metricSelector').addEventListener('change', handleMetricChange);
         document.getElementById('scaleSelector').addEventListener('change', handleScaleChange);
         document.getElementById('viewModeSelector').addEventListener('change', handleViewModeChange);
+        document.getElementById('countryLayerSelector').addEventListener('change', handleCountryLayerChange);
         document.getElementById('applyPerformanceFilters').addEventListener('click', applyPerformanceFilters);
         document.getElementById('clusterRingsToggle').addEventListener('change', (event) => {
             showClusterRings = Boolean(event.target.checked);
@@ -404,6 +431,7 @@
             job: "Aggregated location data",
             city: loc.name,
             country: "",
+            region: "",
             impressions: loc.impressions,
             ctr: loc.ctr,
             clicks: loc.clicks,
@@ -413,7 +441,8 @@
             asr: loc.asr,
             trafficIntent: loc.trafficIntent,
             spend: loc.spend,
-            status: "-"
+            status: "-",
+            lastUpdated: ""
         }));
     }
 
@@ -438,6 +467,7 @@
         set("metricLabel", t.metric);
         set("scaleLabel", t.scale);
         set("viewModeLabel", t.viewMode);
+        set("countryLayerLabel", t.countryLayer);
         set("ctrFilterLabel", t.ctrFilter);
         set("asrFilterLabel", t.asrFilter);
         set("applyPerformanceFilters", t.applyFilter);
@@ -448,6 +478,7 @@
         setTableCollapsed(collapsed);
         updateTableSortButtons();
         updateMetricSelectorOptions();
+        updateCountryLayerOptions();
     }
 
     function clearLocationFilter() {
@@ -470,6 +501,14 @@
     function handleViewModeChange(event) {
         selectedViewMode = event.target.value;
         renderMarkers();
+        updateLegendBounds();
+    }
+
+    function handleCountryLayerChange(event) {
+        selectedCountryLayer = event.target.value || 'all';
+        activeCityFilter = '';
+        renderMarkers();
+        renderJobsTable();
         updateLegendBounds();
     }
 
@@ -537,7 +576,7 @@
     }
 
     function metricUsesPerJob(metricKey) {
-        return metricKey === 'apps' || metricKey === 'applyStarts' || metricKey === 'clicks';
+        return metricKey === 'apps' || metricKey === 'applyStarts' || metricKey === 'clicks' || metricKey === 'spend';
     }
 
     function getMetricSupportFlags() {
@@ -564,6 +603,7 @@
         if (metricKey === 'applyStarts') return 'Application starts';
         if (metricKey === 'clicks') return 'Clicks';
         if (metricKey === 'acr') return 'Apply completion rate (ACR)';
+        if (metricKey === 'spend') return 'Spend';
         if (metricKey === 'jobs') return 'Job count';
         if (metricKey === 'ctr') return 'Click-through rate (CTR)';
         if (metricKey === 'asr') return 'Apply start rate (ASR)';
@@ -602,6 +642,7 @@
         if (metricKey === 'applyStarts') value = location.applyStarts || 0;
         else if (metricKey === 'clicks') value = location.clicks || 0;
         else if (metricKey === 'acr') value = location.acr || 0;
+        else if (metricKey === 'spend') value = location.spend || 0;
         else if (metricKey === 'jobs') value = location.jobs || 0;
         else if (metricKey === 'ctr') value = location.ctr || 0;
         else if (metricKey === 'asr') value = location.asr || 0;
@@ -634,6 +675,49 @@
         return country || 'Unknown';
     }
 
+    function getRowCountryKey(row) {
+        const country = String((row && row.country) || '').trim();
+        return country || 'Unknown';
+    }
+
+    function updateCountryLayerOptions() {
+        const selector = document.getElementById('countryLayerSelector');
+        if (!selector) return;
+        const t = uiText[currentLanguage] || uiText.en;
+        const countrySet = new Set();
+        campaignData.forEach((loc) => countrySet.add(getCountryKey(loc)));
+        const options = Array.from(countrySet).sort((a, b) => a.localeCompare(b));
+        selector.innerHTML = '';
+        const allOpt = document.createElement('option');
+        allOpt.value = 'all';
+        allOpt.textContent = t.allCountries;
+        selector.appendChild(allOpt);
+        options.forEach((country) => {
+            const opt = document.createElement('option');
+            opt.value = country;
+            opt.textContent = country;
+            selector.appendChild(opt);
+        });
+        if (selectedCountryLayer !== 'all' && !countrySet.has(selectedCountryLayer)) {
+            selectedCountryLayer = 'all';
+        }
+        selector.value = selectedCountryLayer;
+    }
+
+    function buildCountryScaleMap(locations) {
+        const grouped = new Map();
+        (locations || []).forEach((loc) => {
+            const key = getCountryKey(loc);
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(Number(getMetricValue(loc)));
+        });
+        const scaleByCountry = new Map();
+        grouped.forEach((values, countryKey) => {
+            scaleByCountry.set(countryKey, buildScaleInfo(values));
+        });
+        return scaleByCountry;
+    }
+
     function passesThreshold(value, filterConfig) {
         if (filterConfig.value == null || !Number.isFinite(filterConfig.value)) return true;
         if (!Number.isFinite(value)) return false;
@@ -646,7 +730,11 @@
     }
 
     function getFilteredCampaignData() {
-        return campaignData.filter((loc) => passesPerformanceFilter(loc));
+        return campaignData.filter((loc) => {
+            if (!passesPerformanceFilter(loc)) return false;
+            if (selectedCountryLayer === 'all') return true;
+            return getCountryKey(loc) === selectedCountryLayer;
+        });
     }
 
     function percentile(sortedValues, p) {
@@ -747,6 +835,45 @@
         return clusters;
     }
 
+    function buildLocationClustersByPixels(locations, pixelThreshold = 90) {
+        if (!map || typeof map.latLngToLayerPoint !== 'function') return [];
+        const points = locations.map((loc) => map.latLngToLayerPoint([Number(loc.lat || 0), Number(loc.lng || 0)]));
+        const clusters = [];
+        const visited = new Set();
+        for (let i = 0; i < locations.length; i += 1) {
+            if (visited.has(i)) continue;
+            const queue = [i];
+            visited.add(i);
+            const idxs = [];
+            while (queue.length) {
+                const current = queue.shift();
+                idxs.push(current);
+                const base = points[current];
+                for (let j = 0; j < locations.length; j += 1) {
+                    if (visited.has(j)) continue;
+                    const other = points[j];
+                    const dx = base.x - other.x;
+                    const dy = base.y - other.y;
+                    const dist = Math.sqrt((dx * dx) + (dy * dy));
+                    if (dist <= pixelThreshold) {
+                        visited.add(j);
+                        queue.push(j);
+                    }
+                }
+            }
+            clusters.push(idxs.map((idx) => locations[idx]));
+        }
+        return clusters;
+    }
+
+    function median(values) {
+        const clean = (Array.isArray(values) ? values : []).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+        if (!clean.length) return 0;
+        const mid = Math.floor(clean.length / 2);
+        if (clean.length % 2 === 0) return (clean[mid - 1] + clean[mid]) / 2;
+        return clean[mid];
+    }
+
     function getClusterMetricValue(cluster) {
         if (!Array.isArray(cluster) || !cluster.length) return 0;
         if (selectedMetric === 'ctr') {
@@ -783,6 +910,14 @@
             }
             return cluster.reduce((sum, loc) => sum + Number(loc.applyStarts || 0), 0);
         }
+        if (selectedMetric === 'spend') {
+            if (selectedViewMode === 'perJob') {
+                const spend = cluster.reduce((sum, loc) => sum + Number(loc.spend || 0), 0);
+                const jobs = cluster.reduce((sum, loc) => sum + Number(loc.jobs || 0), 0);
+                return jobs > 0 ? spend / jobs : 0;
+            }
+            return cluster.reduce((sum, loc) => sum + Number(loc.spend || 0), 0);
+        }
         if (selectedMetric === 'clicks') {
             if (selectedViewMode === 'perJob') {
                 const clicks = cluster.reduce((sum, loc) => sum + Number(loc.clicks || 0), 0);
@@ -809,8 +944,7 @@
         if (!clusters.length) return;
         const clusterValues = clusters.map((cluster) => getClusterMetricValue(cluster));
         const scale = referenceScale || buildScaleInfo(clusterValues);
-        const currentZoom = Number(map && typeof map.getZoom === 'function' ? map.getZoom() : 10);
-        const zoomScale = Math.max(1, Math.min(2.6, 11 / Math.max(currentZoom, 1)));
+        const zoomScale = 1;
         clusters.forEach((cluster, idx) => {
             const centroid = cluster.reduce((acc, loc) => {
                 acc.lat += Number(loc.lat || 0);
@@ -822,7 +956,6 @@
             const value = clusterValues[idx];
             const scaledValue = scale.mapValue(value);
             const ringColor = gradientColorForValue(scaledValue, scale.low, scale.high);
-            // Subtle flare: layered fill-only circles (opaque center -> transparent edge).
             const flareLayers = [
                 { radius: Math.round(5000 * zoomScale), fillOpacity: 0.18 },
                 { radius: Math.round(10000 * zoomScale), fillOpacity: 0.10 },
@@ -870,7 +1003,7 @@
         const scale = buildScaleInfo(values);
         document.getElementById('legendLowLabel').textContent = `LOW ${formatLegendValue(selectedMetric, scale.legendLow)}`;
         document.getElementById('legendHighLabel').textContent = `HIGH ${formatLegendValue(selectedMetric, scale.legendHigh)}`;
-        document.getElementById('legendHelp').textContent = `Markers use ${scale.label} scaling for ${metricLabel.toLowerCase()}.`;
+        document.getElementById('legendHelp').textContent = `Markers use ${scale.label} scaling for ${metricLabel.toLowerCase()} (normalized within each country).`;
     }
 
     function renderMarkers() {
@@ -880,12 +1013,13 @@
         const sortedData = [...filteredData].sort((a, b) => getMetricValue(a) - getMetricValue(b));
         if (!sortedData.length) return;
         const globalScale = buildScaleInfo(sortedData.map((loc) => getMetricValue(loc)));
+        const countryScaleMap = buildCountryScaleMap(sortedData);
         lastRingData = sortedData;
         lastRingScale = globalScale;
         renderClusterRings(sortedData, globalScale);
 
         sortedData.forEach((loc) => {
-            const activeScale = globalScale;
+            const activeScale = countryScaleMap.get(getCountryKey(loc)) || buildScaleInfo([getMetricValue(loc)]);
             const scaledValue = activeScale.mapValue(getMetricValue(loc));
             const markerColor = gradientColorForValue(scaledValue, activeScale.low, activeScale.high);
             const perJobMode = selectedViewMode === 'perJob';
@@ -902,8 +1036,8 @@
             const marker = L.circleMarker([loc.lat, loc.lng], {
                 radius: 8,
                 fillColor: markerColor,
-                color: "#ffffff",
-                weight: 2,
+                stroke: false,
+                weight: 0,
                 opacity: 1,
                 fillOpacity: 0.9
             });
@@ -930,7 +1064,6 @@
             marker.on('click', () => {
                 activeCityFilter = loc.name;
                 renderJobsTable();
-                setTableCollapsed(false);
             });
             markersLayer.addLayer(marker);
         });
@@ -952,10 +1085,114 @@
             .replace(/'/g, '&#039;');
     }
 
+    function normalizeToken(value) {
+        return String(value || '')
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function toIsoCountryCode(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+        const key = normalizeToken(raw);
+        const lookup = {
+            germany: 'DE',
+            deutschland: 'DE',
+            niederlande: 'NL',
+            netherlands: 'NL',
+            france: 'FR',
+            frankreich: 'FR',
+            espana: 'ES',
+            spain: 'ES',
+            italien: 'IT',
+            italy: 'IT',
+            belgium: 'BE',
+            belgie: 'BE',
+            belgique: 'BE',
+            unitedkingdom: 'GB',
+            uk: 'GB',
+            greatbritain: 'GB',
+            grossbritannien: 'GB',
+            ireland: 'IE'
+        };
+        return lookup[key] || raw.toUpperCase();
+    }
+
+    function sanitizeJobQueryTitle(rawTitle) {
+        const title = String(rawTitle || '').trim();
+        if (!title) return '';
+        // Keep the title up to (m/w/d)-style markers to avoid noisy tail qualifiers.
+        const match = title.match(/^(.*?)(\(\s*m\s*\/\s*w\s*\/\s*d\s*\))/i);
+        if (match && match[1]) {
+            const cleaned = String(match[1]).trim();
+            return cleaned || title;
+        }
+        return title;
+    }
+
+    function monthTokenFromDateText(rawText) {
+        const text = String(rawText || '').trim();
+        const now = new Date();
+        const fallback = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (!text) return fallback;
+
+        let m = text.match(/(\d{4})[-/](\d{2})/);
+        if (m) return `${m[1]}${m[2]}`;
+
+        const monthMap = {
+            jan: '01', january: '01',
+            feb: '02', february: '02',
+            mar: '03', march: '03',
+            apr: '04', april: '04',
+            may: '05',
+            jun: '06', june: '06',
+            jul: '07', july: '07',
+            aug: '08', august: '08',
+            sep: '09', sept: '09', september: '09',
+            oct: '10', october: '10',
+            nov: '11', november: '11',
+            dec: '12', december: '12'
+        };
+        m = text.match(/(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/);
+        if (m) {
+            const mm = monthMap[String(m[2] || '').toLowerCase()];
+            if (mm) return `${m[3]}${mm}`;
+        }
+        m = text.match(/([A-Za-z]{3,})\s+\d{1,2},?\s+(\d{4})/);
+        if (m) {
+            const mm = monthMap[String(m[1] || '').toLowerCase()];
+            if (mm) return `${m[2]}${mm}`;
+        }
+        return fallback;
+    }
+
+    function buildHiringInsightsUrl(row) {
+        const job = sanitizeJobQueryTitle((row && row.job) || '');
+        const city = String((row && row.city) || '').trim();
+        const region = String((row && row.region) || '').trim();
+        const country = String((row && row.country) || '').trim();
+        if (!job) return '';
+        const params = new URLSearchParams();
+        params.set('q', job);
+        params.set('month', monthTokenFromDateText(row && row.lastUpdated));
+        if (city || region) params.set('l', [city, region].filter(Boolean).join(', '));
+        const countryCode = toIsoCountryCode(country);
+        if (countryCode) params.set('country', countryCode);
+        return `https://employers.indeed.com/hiring-insights?${params.toString()}`;
+    }
+
     function visibleTableRows() {
-        const baseRows = uploadedJobRows.filter((row) => passesPerformanceFilter(row));
+        const baseRows = uploadedJobRows.filter((row) => {
+            if (!passesPerformanceFilter(row)) return false;
+            if (selectedCountryLayer === 'all') return true;
+            return getRowCountryKey(row) === selectedCountryLayer;
+        });
         if (!activeCityFilter) return baseRows;
-        return baseRows.filter((row) => row.city === activeCityFilter);
+        const selectedCityKey = normalizeToken(activeCityFilter);
+        return baseRows.filter((row) => normalizeToken(row.city) === selectedCityKey);
     }
 
     function getTableSortValue(row, key) {
@@ -999,7 +1236,9 @@
 
         body.innerHTML = rows.map((row) => `
             <tr>
-                <td>${escapeHtml(row.job)}</td>
+                <td>${buildHiringInsightsUrl(row)
+                    ? `<a href="${escapeHtml(buildHiringInsightsUrl(row))}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.job)}</a>`
+                    : `${escapeHtml(row.job)}`}</td>
                 <td>${escapeHtml(row.city)}</td>
                 <td>${Number(row.impressions || 0).toLocaleString()}</td>
                 <td>${(Number(row.ctr || 0) * 100).toFixed(2)}%</td>
@@ -1084,7 +1323,8 @@
                 return;
             }
             const country = String(getField(row, ['country', 'land', 'pays', 'paese', 'pais'], false) || '').trim();
-            const region = String(getField(row, ['countyregion', 'region', 'state', 'province', 'provincieregio', 'bundeslandregion', 'departementregion', 'regioneprovincia', 'estadoregion'], false) || '').trim();
+            const region = String(getField(row, ['countyregion', 'stateregion', 'region', 'state', 'province', 'provincieregio', 'bundeslandregion', 'departementregion', 'regioneprovincia', 'estadoregion'], false) || '').trim();
+            const lastUpdated = String(getField(row, ['lastupdated', 'last updated', 'zuletztaktualisiert', 'dernieremaj', 'dernieremiseajour', 'ultimoaggiornamento', 'ultimactualizacion'], false) || '').trim();
             const impressions = parseNumber(getField(row, ['impressions', 'impressies', 'visualizzazioni', 'impresiones']), 0);
             const clicks = parseNumber(getField(row, ['clicks', 'kliks', 'klicks', 'clics', 'click']), 0);
             const applyStarts = parseNumber(getField(row, ['applystarts', 'gestartesollicitaties', 'begonnenebewerbungen', 'candidaturescommencees', 'candidatureavviate', 'postulacionesiniciadas']), 0);
@@ -1107,6 +1347,7 @@
                 city: String(cityRaw).trim(),
                 country,
                 region,
+                lastUpdated,
                 impressions,
                 clicks,
                 applyStarts,
@@ -1300,18 +1541,20 @@
             uploadedJobRows = parsed.map((loc) => ({
                 job: "Uploaded location row",
                 city: loc.name,
-                country: loc.country || "",
-                impressions: loc.impressions || 0,
-                ctr: loc.ctr || 0,
-                clicks: loc.clicks || 0,
-                applyStarts: loc.applyStarts || loc.apps || 0,
-                acr: (loc.applyStarts || loc.apps || 0) > 0 ? (loc.apps || 0) / (loc.applyStarts || loc.apps || 0) : 0,
-                applications: loc.apps || 0,
-                asr: loc.asr || 0,
-                trafficIntent: loc.trafficIntent || 0,
-                spend: loc.spend || 0,
-                status: "-"
-            }));
+                    country: loc.country || "",
+                    region: loc.region || "",
+                    impressions: loc.impressions || 0,
+                    ctr: loc.ctr || 0,
+                    clicks: loc.clicks || 0,
+                    applyStarts: loc.applyStarts || loc.apps || 0,
+                    acr: (loc.applyStarts || loc.apps || 0) > 0 ? (loc.apps || 0) / (loc.applyStarts || loc.apps || 0) : 0,
+                    applications: loc.apps || 0,
+                    asr: loc.asr || 0,
+                    trafficIntent: loc.trafficIntent || 0,
+                    spend: loc.spend || 0,
+                    status: "-",
+                    lastUpdated: ""
+                }));
         }
 
         if (!parsed.length || !uploadedJobRows.length) {
@@ -1334,6 +1577,7 @@
         activeCityFilter = '';
         tableSort = { key: "city", dir: "asc" };
         campaignData = resolvedData;
+        updateCountryLayerOptions();
         updateMetricSelectorOptions();
         renderMarkers();
         renderJobsTable();
