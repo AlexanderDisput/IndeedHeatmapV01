@@ -327,6 +327,10 @@
         font-weight: 700;
       }
 
+      .city-filter-btn {
+        display: none;
+      }
+
       .job-row td:first-child {
         padding-left: 36px;
         color: var(--muted);
@@ -442,6 +446,10 @@
         </div>
         <div class="section-card">
           <div class="graph-controls">
+            <label for="countryFilterSelector">Country</label>
+            <select id="countryFilterSelector">
+              <option value="__all__">All countries</option>
+            </select>
             <label id="graphMetricLabel" for="costMetricSelector">Graph cost metric</label>
             <select id="costMetricSelector">
               <option value="cpas">CPAS</option>
@@ -471,6 +479,7 @@
             <button id="filterMedianCpasBtn" class="median-filter-btn" type="button">CPAS Above Median</button>
             <input id="cpasMedianInput" class="median-input" type="number" min="0" step="0.01" placeholder="CPAS value" />
             <span id="tableMedianNotice" class="table-median-notice"></span>
+            <button id="clearCityFilterBtn" class="median-filter-btn city-filter-btn" type="button"></button>
             <div class="export-controls">
               <select id="exportMetricSelector">
                 <option value="cpa">CPA</option>
@@ -548,6 +557,9 @@
       let zoomPromptEl = null;
       let suppressZoomPromptClick = false;
       let lastUploadExportMeta = null;
+      let selectedCityTableFilter = "";
+      let selectedCityCountryFilter = "";
+      let selectedCountryFilter = "__all__";
       const uiText = {
         en: { title: "Budget Efficiency (CPA/CPAS vs Volume)", subtitle: "X = Volume (Applications or Apply starts), Y = Cost (CPA or CPAS), bubble size = Jobs, color = cost percentile.", graphMetric: "Graph cost metric", min: "Min", max: "Max", apply: "Apply", resetZoom: "Reset Zoom", legend: "Higher on the Y-axis means higher cost.", cpaBtn: "CPA Above Median", cpasBtn: "CPAS Above Median", exportBtn: "Export", defaultStatus: "Showing built-in sample data. Upload a CSV to replace it." },
         de: { title: "Budget-Effizienz (CPA/CPAS vs Volumen)", subtitle: "X = Volumen (Bewerbungen oder Starts), Y = Kosten (CPA oder CPAS), Blasengröße = Jobs, Farbe = Kosten-Perzentil.", graphMetric: "Kostenmetrik", min: "Min", max: "Max", apply: "Anwenden", resetZoom: "Zoom zurücksetzen", legend: "Höher auf der Y-Achse bedeutet höhere Kosten.", cpaBtn: "CPA über Median", cpasBtn: "CPAS über Median", exportBtn: "Export", defaultStatus: "Beispieldaten werden angezeigt. CSV hochladen zum Ersetzen." },
@@ -819,6 +831,32 @@
         }
       }
 
+      function updateCountryFilterOptions(cityData) {
+        const selector = document.getElementById("countryFilterSelector");
+        if (!selector) return;
+        const countries = Array.from(
+          new Set(
+            (Array.isArray(cityData) ? cityData : [])
+              .map((row) => String(row.country || "").trim())
+              .filter(Boolean)
+          )
+        ).sort((a, b) => a.localeCompare(b));
+        const previous = selectedCountryFilter || "__all__";
+        selector.innerHTML = "";
+        const allOpt = document.createElement("option");
+        allOpt.value = "__all__";
+        allOpt.textContent = "All countries";
+        selector.appendChild(allOpt);
+        countries.forEach((country) => {
+          const opt = document.createElement("option");
+          opt.value = country;
+          opt.textContent = country;
+          selector.appendChild(opt);
+        });
+        selectedCountryFilter = countries.includes(previous) || previous === "__all__" ? previous : "__all__";
+        selector.value = selectedCountryFilter;
+      }
+
       function triggerDownloadCsv(filename, headers, rows) {
         const lines = [];
         lines.push(headers.map(csvEscape).join(","));
@@ -875,7 +913,13 @@
           return;
         }
 
+        const selectedCityKey = normalizeCityKey(selectedCityTableFilter);
+        const selectedCountryKey = normalizeCountryKey(selectedCityCountryFilter);
+        const activeCountryFilterKey = selectedCountryFilter === "__all__" ? "" : normalizeCountryKey(selectedCountryFilter);
         const filtered = lastUploadExportMeta.rows.filter((row) => {
+          if (activeCountryFilterKey && normalizeCountryKey(row.countryValue) !== activeCountryFilterKey) return false;
+          if (selectedCityKey && normalizeCityKey(row.cityValue) !== selectedCityKey) return false;
+          if (selectedCountryKey && normalizeCountryKey(row.countryValue) !== selectedCountryKey) return false;
           const value = metric === "cpas" ? row.cpasValue : row.cpaValue;
           return Number.isFinite(value) && value > threshold;
         });
@@ -885,7 +929,9 @@
         const sourceName = lastUploadExportMeta.sourceName || "uploaded";
         const fileName = `${sourceName.replace(/\.csv$/i, "")}_${metric}_above_${threshold}.csv`;
         triggerDownloadCsv(fileName, localizedHeaders, outputRows);
-        statusEl.textContent = `Exported ${outputRows.length} row(s) above ${metric.toUpperCase()} ${threshold}.`;
+        statusEl.textContent = selectedCityTableFilter
+          ? `Exported ${outputRows.length} row(s) for ${selectedCityTableFilter} above ${metric.toUpperCase()} ${threshold}.`
+          : `Exported ${outputRows.length} row(s) above ${metric.toUpperCase()} ${threshold}.`;
       }
 
       function computeMedianStats(cityData) {
@@ -969,8 +1015,10 @@
           "numero de reference"
         ]);
         const jobMeta = findHeaderMeta(headers, rawHeaders, ["job", "vacature", "stelle", "emploi", "annuncio", "empleo", "functie", "ruolo"]);
+        const countryMeta = findHeaderMeta(headers, rawHeaders, ["country", "land", "pays", "paese", "pais"]);
         const idx = {
           city: cityMeta.idx,
+          country: countryMeta.idx,
           spend: spendMeta.idx,
           applies: appliesMeta.idx,
           applyStarts: applyStartsMeta.idx,
@@ -985,6 +1033,7 @@
 
         const rawRows = rows.slice(1).map((cells) => ({
           city: (cells[idx.city] || "").trim(),
+          country: idx.country >= 0 ? ((cells[idx.country] || "").trim().toUpperCase() || "N/A") : "N/A",
           spend: parseNumber(cells[idx.spend]),
           applies: idx.applies >= 0 ? parseNumber(cells[idx.applies]) : null,
           applyStarts: idx.applyStarts >= 0 ? parseNumber(cells[idx.applyStarts]) : null,
@@ -1001,7 +1050,9 @@
           const cpasFromCell = idx.cpas >= 0 ? parseNumber(cells[idx.cpas]) : null;
           const cpaValue = cpaFromCell != null ? cpaFromCell : applies > 0 ? (spend ?? 0) / applies : null;
           const cpasValue = cpasFromCell != null ? cpasFromCell : applyStarts > 0 ? (spend ?? 0) / applyStarts : null;
-          return { cells, cpaValue, cpasValue };
+          const cityValue = idx.city >= 0 ? (cells[idx.city] || "").trim() : "";
+          const countryValue = idx.country >= 0 ? ((cells[idx.country] || "").trim().toUpperCase() || "N/A") : "N/A";
+          return { cells, cpaValue, cpasValue, cityValue, countryValue };
         });
 
         const hasPositiveApplies = rawRows.some((r) => r.applies != null && r.applies > 0);
@@ -1015,8 +1066,11 @@
           const applies = rowData.applies ?? 0;
           const applyStarts = rowData.applyStarts ?? 0;
 
-          if (!cityMap.has(rowData.city)) {
-            cityMap.set(rowData.city, {
+          const country = rowData.country || "N/A";
+          const cityKey = `${country}||${rowData.city}`;
+          if (!cityMap.has(cityKey)) {
+            cityMap.set(cityKey, {
+              country,
               city: rowData.city,
               spend: 0,
               applicationsTotal: 0,
@@ -1030,7 +1084,7 @@
             });
           }
 
-          const current = cityMap.get(rowData.city);
+          const current = cityMap.get(cityKey);
           current.spend += spend;
           current.applicationsTotal += applies;
           current.applyStartsTotal += applyStarts;
@@ -1106,6 +1160,7 @@
             const primaryApplications = defaultMetric === "applies" ? d.applicationsTotal : d.applyStartsTotal;
             const primaryCost = defaultMetric === "applies" ? cityCpa : cityCpas;
             return {
+              country: d.country || "N/A",
               city: d.city,
               spend: d.spend,
               applicationsTotal: d.applicationsTotal,
@@ -1115,6 +1170,7 @@
               cpa: cityCpa,
               cpas: cityCpas,
               primaryCost,
+              cityKey: `${d.country || "N/A"}||${d.city}`,
               jobRows
             };
           })
@@ -1223,13 +1279,12 @@
 
       function showTooltip(point, x, y, metricName, volumeLabel) {
         const chartCost = Number.isFinite(point.chartCost) ? point.chartCost : point.primaryCost ?? point.cpa ?? 0;
-        const chartVolume = Number.isFinite(point.chartVolume) ? point.chartVolume : point.applicationsTotal ?? 0;
         tooltipEl.innerHTML = [
           `<strong>${point.city}</strong>`,
+          `Country: ${point.country || "N/A"}`,
           `Spend: $${point.spend.toLocaleString()}`,
           `Apply starts: ${Math.round(point.applyStartsTotal ?? 0).toLocaleString()}`,
           `Applications: ${Math.round(point.applicationsTotal ?? 0).toLocaleString()}`,
-          `${volumeLabel}: ${Math.round(chartVolume).toLocaleString()}`,
           `Jobs: ${point.jobs.toLocaleString()}`,
           `${metricName}: $${chartCost.toFixed(2)}`,
           `${metricName} percentile: ${Math.round(point.cpaPercentile)}th`
@@ -1426,6 +1481,13 @@
             showTooltip(point, mouse.x, mouse.y, metricName, volumeLabel);
           });
           bubble.addEventListener("mouseleave", hideTooltip);
+          bubble.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectedCityTableFilter = point.city;
+            selectedCityCountryFilter = point.country || "";
+            expandedCities = new Set([point.cityKey || `${point.country || ""}||${point.city}`]);
+            buildTable(lastRenderedCityData);
+          });
           svg.appendChild(bubble);
         });
       }
@@ -1446,6 +1508,11 @@
           if (max != null && value > max) return false;
           return true;
         });
+      }
+
+      function applyCountryFilter(cityData) {
+        if (selectedCountryFilter === "__all__") return cityData;
+        return cityData.filter((row) => normalizeCountryKey(row.country) === normalizeCountryKey(selectedCountryFilter));
       }
 
       function jobPassesActiveCostFilter(jobRow) {
@@ -1530,14 +1597,50 @@
         });
       }
 
+      function normalizeCityKey(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\s+/g, " ");
+      }
+
+      function normalizeCountryKey(value) {
+        return String(value || "")
+          .trim()
+          .toUpperCase();
+      }
+
+      function updateCityFilterButton() {
+        const btn = document.getElementById("clearCityFilterBtn");
+        if (!btn) return;
+        if (!selectedCityTableFilter) {
+          btn.style.display = "none";
+          btn.textContent = "";
+          return;
+        }
+        btn.style.display = "inline-flex";
+        const countrySuffix = selectedCityCountryFilter ? ` (${selectedCityCountryFilter})` : "";
+        btn.textContent = `Filtered location: ${selectedCityTableFilter}${countrySuffix} ×`;
+      }
+
       function buildTable(cityData) {
         tableBody.innerHTML = "";
         updateConditionalColumnsVisibility();
         updateMedianFilterButtons();
         updateSortButtons();
+        updateCityFilterButton();
 
-        const rows = sortRows(cityData);
-        const validCityKeys = new Set(rows.map((row) => row.city));
+        const cityScopedRows = selectedCityTableFilter
+          ? cityData.filter(
+            (row) =>
+              normalizeCityKey(row.city) === normalizeCityKey(selectedCityTableFilter) &&
+              (!selectedCityCountryFilter || normalizeCountryKey(row.country) === normalizeCountryKey(selectedCityCountryFilter))
+          )
+          : cityData;
+        const rows = sortRows(cityScopedRows);
+        const validCityKeys = new Set(rows.map((row) => row.cityKey || `${row.country || ""}||${row.city}`));
         expandedCities = new Set(Array.from(expandedCities).filter((cityKey) => validCityKeys.has(cityKey)));
         const metricColorMode = medianJobFilterMode === "none"
           ? (tableSort.key === "applyStarts" || tableSort.key === "applications" || tableSort.key === "cpa" || tableSort.key === "cpas")
@@ -1563,11 +1666,11 @@
         const metricMax = metricValues.length ? Math.max(...metricValues) : 1;
         const metricSorted = metricValues.length ? [...metricValues].sort((a, b) => a - b) : [];
 
-        function toggleCityExpansion(cityName) {
-          if (expandedCities.has(cityName)) {
-            expandedCities.delete(cityName);
+        function toggleCityExpansion(cityKey) {
+          if (expandedCities.has(cityKey)) {
+            expandedCities.delete(cityKey);
           } else {
-            expandedCities.add(cityName);
+            expandedCities.add(cityKey);
           }
           buildTable(cityData);
         }
@@ -1575,15 +1678,19 @@
         rows.forEach((cityRow) => {
           const tr = document.createElement("tr");
           tr.classList.add("city-row");
+          const cityRowKey = cityRow.cityKey || `${cityRow.country || ""}||${cityRow.city}`;
           const visibleJobRows = Array.isArray(cityRow.jobRows)
             ? cityRow.jobRows.filter((jobRow) => jobPassesActiveCostFilter(jobRow))
             : [];
           const hasJobRows = visibleJobRows.length > 0;
-          const isExpanded = expandedCities.has(cityRow.city);
+          const isExpanded = expandedCities.has(cityRowKey);
           const toggleSymbol = hasJobRows ? (isExpanded ? "-" : "+") : "";
+          const cityDisplay = selectedCountryFilter === "__all__" && cityRow.country
+            ? `${cityRow.city} (${cityRow.country})`
+            : cityRow.city;
           const cityLabel = hasJobRows
-            ? `<button class="row-toggle">${toggleSymbol}</button>${escapeHtml(cityRow.city)}`
-            : `${escapeHtml(cityRow.city)}`;
+            ? `<button class="row-toggle">${toggleSymbol}</button>${escapeHtml(cityDisplay)}`
+            : `${escapeHtml(cityDisplay)}`;
           const applicationsCell = showApplicationsMetrics
             ? `<td>${Math.round(cityRow.applicationsTotal || 0).toLocaleString()}</td>`
             : "";
@@ -1603,14 +1710,14 @@
 
           if (hasJobRows) {
             tr.classList.add("clickable");
-            tr.addEventListener("click", () => toggleCityExpansion(cityRow.city));
+            tr.addEventListener("click", () => toggleCityExpansion(cityRowKey));
           }
 
           const toggleBtn = tr.querySelector(".row-toggle");
           if (toggleBtn && hasJobRows) {
             toggleBtn.addEventListener("click", (event) => {
               event.stopPropagation();
-              toggleCityExpansion(cityRow.city);
+              toggleCityExpansion(cityRowKey);
             });
           }
 
@@ -1689,12 +1796,13 @@
       }
 
       function render(cityData, metricLabel) {
-        computeMedianStats(cityData);
+        const countryScopedData = applyCountryFilter(cityData);
+        computeMedianStats(countryScopedData);
         svg.innerHTML = "";
         hideTooltip();
         hideZoomClickMenu();
         chartScaleState = null;
-        const filteredCityData = applyCostFilter(cityData);
+        const filteredCityData = applyCostFilter(countryScopedData);
         lastRenderedCityData = filteredCityData;
         if (!filteredCityData.length) {
           statusEl.textContent = "No rows match the selected CPA/CPAS filter.";
@@ -1710,13 +1818,23 @@
           if (!Number.isFinite(cityRow.primaryCost)) cityRow.primaryCost = cityRow.cpa || 0;
           cityRow.chartVolume = selectedCostMetric === "cpas" ? cityRow.applyStartsTotal || 0 : cityRow.applicationsTotal || 0;
         });
-        const minVolume = Math.min(...filteredCityData.map((d) => d.chartVolume || 0));
-        const maxVolume = Math.max(...filteredCityData.map((d) => d.chartVolume || 0));
-        const maxJobs = Math.max(...filteredCityData.map((d) => d.jobs));
+        const graphCityData = filteredCityData.filter((d) => {
+          const cost = selectedCostMetric === "cpas" ? Number(d.cpas || 0) : Number(d.cpa || 0);
+          return Number.isFinite(cost) && cost > 0;
+        });
+        if (!graphCityData.length) {
+          statusEl.textContent = `No non-zero ${selectedCostMetric.toUpperCase()} points to plot.`;
+          buildTable(filteredCityData);
+          updateZoomButtonState();
+          return;
+        }
+        const minVolume = Math.min(...graphCityData.map((d) => d.chartVolume || 0));
+        const maxVolume = Math.max(...graphCityData.map((d) => d.chartVolume || 0));
+        const maxJobs = Math.max(...graphCityData.map((d) => d.jobs));
 
-        enrichPerformanceMetrics(filteredCityData);
-        const minCost = Math.min(...filteredCityData.map((d) => d.chartCost || 0));
-        const maxCost = Math.max(...filteredCityData.map((d) => d.chartCost || 0));
+        enrichPerformanceMetrics(graphCityData);
+        const minCost = Math.min(...graphCityData.map((d) => d.chartCost || 0));
+        const maxCost = Math.max(...graphCityData.map((d) => d.chartCost || 0));
         if (zoomState) {
           const validZoom =
             Number.isFinite(zoomState.xMin) &&
@@ -1769,7 +1887,7 @@
         });
         document.getElementById("legendCostLow").textContent = `LOW ${graphMetricName} percentile`;
         document.getElementById("legendCostHigh").textContent = `HIGH ${graphMetricName} percentile`;
-        const visibleCityData = filteredCityData.filter((point) => {
+        const visibleCityData = graphCityData.filter((point) => {
           const volume = Number(point.chartVolume || 0);
           const cost = Number(point.chartCost || 0);
           return volume >= activeMinVolume && volume <= activeMaxVolume && cost >= activeMinCost && cost <= activeMaxCost;
@@ -1824,8 +1942,11 @@
           const { cityData, metricLabel, exportMeta } = aggregateByCity(csvText);
           lastRawCityData = cityData;
           medianJobFilterMode = "none";
+          selectedCityTableFilter = "";
+          selectedCityCountryFilter = "";
           showApplicationsMetrics = cityData.some((row) => Number(row.applicationsTotal || 0) > 0);
           lastUploadExportMeta = exportMeta ? { ...exportMeta, sourceName: sourceLabel } : null;
+          updateCountryFilterOptions(cityData);
           setTableHeaderLabels(tableLabelsByLanguage[currentLanguage] || defaultTableLabels);
           document.getElementById("costMetricSelector").value = selectedCostMetric;
           zoomState = null;
@@ -1835,6 +1956,8 @@
         } catch (error) {
           statusEl.textContent = `Could not parse CSV: ${error.message}`;
           lastUploadExportMeta = null;
+          selectedCountryFilter = "__all__";
+          updateCountryFilterOptions([]);
           setTableHeaderLabels(tableLabelsByLanguage[currentLanguage] || defaultTableLabels);
         }
       }
@@ -1883,7 +2006,7 @@
           expandedCities = new Set(
             lastRenderedCityData
               .filter((row) => Array.isArray(row.jobRows) && row.jobRows.length > 0)
-              .map((row) => row.city)
+              .map((row) => row.cityKey || `${row.country || ""}||${row.city}`)
           );
         }
         if (lastRenderedCityData.length) buildTable(lastRenderedCityData);
@@ -1896,7 +2019,7 @@
           expandedCities = new Set(
             lastRenderedCityData
               .filter((row) => Array.isArray(row.jobRows) && row.jobRows.length > 0)
-              .map((row) => row.city)
+              .map((row) => row.cityKey || `${row.country || ""}||${row.city}`)
           );
         }
         if (lastRenderedCityData.length) buildTable(lastRenderedCityData);
@@ -1914,6 +2037,22 @@
         if (lastRenderedCityData.length) buildTable(lastRenderedCityData);
       });
       document.getElementById("exportFilteredBtn").addEventListener("click", exportRowsAboveThreshold);
+      document.getElementById("clearCityFilterBtn").addEventListener("click", () => {
+        selectedCityTableFilter = "";
+        selectedCityCountryFilter = "";
+        expandedCities = new Set();
+        if (lastRenderedCityData.length) buildTable(lastRenderedCityData);
+      });
+      document.getElementById("countryFilterSelector").addEventListener("change", (event) => {
+        selectedCountryFilter = event.target.value || "__all__";
+        selectedCityTableFilter = "";
+        selectedCityCountryFilter = "";
+        expandedCities = new Set();
+        zoomState = null;
+        hideZoomClickMenu();
+        updateZoomButtonState();
+        if (lastRawCityData.length) render(lastRawCityData, "Country filter updated");
+      });
       svg.addEventListener("mousedown", startZoomBrush);
       window.addEventListener("mousemove", moveZoomBrush);
       window.addEventListener("mouseup", endZoomBrush);
@@ -1930,8 +2069,13 @@
       });
 
       fileInput.addEventListener("change", handleFileSelection);
-      lastRawCityData = [...sampleCityData];
+      lastRawCityData = [...sampleCityData].map((row) => ({
+        ...row,
+        country: row.country || "N/A",
+        cityKey: `${row.country || "N/A"}||${row.city}`
+      }));
       medianJobFilterMode = "none";
+      updateCountryFilterOptions(lastRawCityData);
       setTableHeaderLabels(tableLabelsByLanguage[currentLanguage] || defaultTableLabels);
       showApplicationsMetrics = lastRawCityData.some((row) => Number(row.applicationsTotal || row.applications || 0) > 0);
       document.getElementById("costMetricSelector").value = selectedCostMetric;
