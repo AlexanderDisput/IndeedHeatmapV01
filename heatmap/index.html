@@ -198,10 +198,10 @@
     </div>
 </div>
 
-<div class="ui-panel">
-    <div>
-        <label id="metricLabel" for="metricSelector" class="control-label">HEATMAP METRIC</label>
-        <select id="metricSelector">
+    <div class="ui-panel">
+        <div>
+            <label id="metricLabel" for="metricSelector" class="control-label">HEATMAP METRIC</label>
+            <select id="metricSelector">
             <option value="apps">Applications</option>
             <option value="applyStarts">Application starts</option>
             <option value="clicks">Clicks</option>
@@ -221,18 +221,26 @@
             <option value="log">Logarithmic</option>
         </select>
     </div>
-    <div style="margin-top: 10px;">
-        <label id="viewModeLabel" for="viewModeSelector" class="control-label">VIEW MODE</label>
-        <select id="viewModeSelector">
-            <option value="total">Total</option>
-            <option value="perJob">Per job</option>
-        </select>
-    </div>
-    <div style="margin-top: 10px;">
-        <label id="countryLayerLabel" for="countryLayerSelector" class="control-label">COUNTRY LAYER</label>
-        <select id="countryLayerSelector">
-            <option value="all">All countries</option>
-        </select>
+        <div style="margin-top: 10px;">
+            <label id="viewModeLabel" for="viewModeSelector" class="control-label">VIEW MODE</label>
+            <select id="viewModeSelector">
+                <option value="total">Total</option>
+                <option value="perJob">Per job</option>
+            </select>
+        </div>
+        <div style="margin-top: 10px;">
+            <label id="positionStatusLabel" for="positionStatusSelector" class="control-label">POSITION STATUS</label>
+            <select id="positionStatusSelector">
+                <option id="positionStatusBoth" value="both">Both</option>
+                <option id="positionStatusOpen" value="open">Open</option>
+                <option id="positionStatusClosed" value="closed">Closed</option>
+            </select>
+        </div>
+        <div style="margin-top: 10px;">
+            <label id="countryLayerLabel" for="countryLayerSelector" class="control-label">COUNTRY LAYER</label>
+            <select id="countryLayerSelector">
+                <option value="all">All countries</option>
+            </select>
     </div>
     <label class="checkbox-row" for="clusterRingsToggle">
         <input id="clusterRingsToggle" type="checkbox" checked />
@@ -290,10 +298,17 @@
     let selectedScale = 'percentile';
     let selectedViewMode = 'total';
     let showClusterRings = true;
+    let selectedPositionStatus = 'both';
+    let hasOpenUploadStatuses = false;
+    let hasClosedUploadStatuses = false;
     let lastRingData = [];
     let lastRingScale = null;
     let activeCityFilter = '';
     let uploadedJobRows = [];
+    let uploadedHeatRows = [];
+    let uploadedSourceFormat = 'default';
+    let cityCoordinateByKey = new Map();
+    let isIndeedUploadData = false;
     let tableSort = { key: "city", dir: "asc" };
     let selectedCountryLayer = 'all';
     let appliedCtrFilter = { op: 'gte', value: null };
@@ -307,36 +322,48 @@
         en: {
             tableTitle: "Uploaded Jobs Table", showTable: "Show Table", hideTable: "Hide Table", clearFilter: "Clear filter",
             metric: "HEATMAP METRIC", scale: "COLOR SCALE", viewMode: "VIEW MODE", ctrFilter: "CTR FILTER", asrFilter: "ASR FILTER",
+            positionStatus: "POSITION STATUS", positionStatusBoth: "Both", positionStatusOpen: "Open", positionStatusClosed: "Closed",
+            positionStatusOpenOnly: "Open", positionStatusClosedOnly: "Closed",
             applyFilter: "Apply CTR/ASR filter", liveCsv: "LIVE CSV UPDATE", clusterRings: "Show area heat rings",
             countryLayer: "COUNTRY LAYER", allCountries: "All countries"
         },
         de: {
             tableTitle: "Hochgeladene Jobs", showTable: "Tabelle anzeigen", hideTable: "Tabelle ausblenden", clearFilter: "Filter löschen",
             metric: "HEATMAP-METRIK", scale: "FARBSKALA", viewMode: "ANSICHT", ctrFilter: "CTR-FILTER", asrFilter: "ASR-FILTER",
+            positionStatus: "STELLENSTATUS", positionStatusBoth: "Beide", positionStatusOpen: "Offen", positionStatusClosed: "Geschlossen",
+            positionStatusOpenOnly: "Offen", positionStatusClosedOnly: "Geschlossen",
             applyFilter: "CTR/ASR-Filter anwenden", liveCsv: "LIVE-CSV-UPDATE", clusterRings: "Flächen-Heat-Ringe anzeigen",
             countryLayer: "LÄNDER-EBENE", allCountries: "Alle Länder"
         },
         fr: {
             tableTitle: "Tableau des emplois importés", showTable: "Afficher le tableau", hideTable: "Masquer le tableau", clearFilter: "Effacer le filtre",
             metric: "MÉTRIQUE HEATMAP", scale: "ÉCHELLE DE COULEUR", viewMode: "MODE D'AFFICHAGE", ctrFilter: "FILTRE CTR", asrFilter: "FILTRE ASR",
+            positionStatus: "STATUT DU POSTE", positionStatusBoth: "Les deux", positionStatusOpen: "Ouvert", positionStatusClosed: "Fermé",
+            positionStatusOpenOnly: "Ouvert", positionStatusClosedOnly: "Fermé",
             applyFilter: "Appliquer le filtre CTR/ASR", liveCsv: "MISE À JOUR CSV", clusterRings: "Afficher les anneaux de zone",
             countryLayer: "COUCHE PAYS", allCountries: "Tous les pays"
         },
         es: {
             tableTitle: "Tabla de empleos cargados", showTable: "Mostrar tabla", hideTable: "Ocultar tabla", clearFilter: "Borrar filtro",
             metric: "MÉTRICA HEATMAP", scale: "ESCALA DE COLOR", viewMode: "MODO DE VISTA", ctrFilter: "FILTRO CTR", asrFilter: "FILTRO ASR",
+            positionStatus: "ESTADO DE LA VACANTE", positionStatusBoth: "Ambos", positionStatusOpen: "Abierta", positionStatusClosed: "Cerrada",
+            positionStatusOpenOnly: "Abierta", positionStatusClosedOnly: "Cerrada",
             applyFilter: "Aplicar filtro CTR/ASR", liveCsv: "ACTUALIZACIÓN CSV", clusterRings: "Mostrar anillos de zona",
             countryLayer: "CAPA DE PAÍS", allCountries: "Todos los países"
         },
         it: {
             tableTitle: "Tabella lavori caricati", showTable: "Mostra tabella", hideTable: "Nascondi tabella", clearFilter: "Cancella filtro",
             metric: "METRICA HEATMAP", scale: "SCALA COLORE", viewMode: "MODALITÀ VISTA", ctrFilter: "FILTRO CTR", asrFilter: "FILTRO ASR",
+            positionStatus: "STATO DELLA POSIZIONE", positionStatusBoth: "Entrambi", positionStatusOpen: "Aperta", positionStatusClosed: "Chiusa",
+            positionStatusOpenOnly: "Aperta", positionStatusClosedOnly: "Chiusa",
             applyFilter: "Applica filtro CTR/ASR", liveCsv: "AGGIORNAMENTO CSV", clusterRings: "Mostra anelli area",
             countryLayer: "LIVELLO PAESE", allCountries: "Tutti i paesi"
         },
         nl: {
             tableTitle: "Geüploade vacatures", showTable: "Tabel tonen", hideTable: "Tabel verbergen", clearFilter: "Filter wissen",
             metric: "HEATMAP-METRIEK", scale: "KLEURSCHAAL", viewMode: "WEERGAVE", ctrFilter: "CTR-FILTER", asrFilter: "ASR-FILTER",
+            positionStatus: "VACATURESTATUS", positionStatusBoth: "Beide", positionStatusOpen: "Open", positionStatusClosed: "Gesloten",
+            positionStatusOpenOnly: "Open", positionStatusClosedOnly: "Gesloten",
             applyFilter: "CTR/ASR-filter toepassen", liveCsv: "LIVE CSV-UPDATE", clusterRings: "Toon gebieds-ringen",
             countryLayer: "LAND-LAAG", allCountries: "Alle landen"
         }
@@ -358,13 +385,18 @@
         belgie: "Belgium",
         belgium: "Belgium"
     };
+    const countryCurrencyMap = {
+        US: "USD", GB: "GBP", UK: "GBP", IE: "EUR", DE: "EUR", FR: "EUR", NL: "EUR", ES: "EUR", IT: "EUR", BE: "EUR",
+        CH: "CHF", AT: "EUR", LU: "EUR", PT: "EUR", SE: "SEK", NO: "NOK", DK: "DKK", PL: "PLN", CZ: "CZK", HU: "HUF",
+        RO: "RON", BG: "BGN", HR: "EUR", SI: "EUR", SK: "EUR", CA: "CAD", AU: "AUD", NZ: "NZD", JP: "JPY"
+    };
     
     const metricConfig = {
         apps: { label: "Applications", formatter: (v) => `${Math.round(v)}` },
         applyStarts: { label: "Application starts", formatter: (v) => `${Math.round(v)}` },
         clicks: { label: "Clicks", formatter: (v) => `${Math.round(v)}` },
         acr: { label: "Apply completion rate", formatter: (v) => `${(v * 100).toFixed(2)}%` },
-        spend: { label: "Spend", formatter: (v) => `€${Number(v || 0).toFixed(2)}` },
+        spend: { label: "Spend", formatter: (v) => `${Number(v || 0).toFixed(2)}` },
         jobs: { label: "Job count", formatter: (v) => `${Math.round(v)}` },
         ctr: { label: "Click-through rate", formatter: (v) => `${(v * 100).toFixed(2)}%` },
         asr: { label: "Apply start rate", formatter: (v) => `${(v * 100).toFixed(2)}%` },
@@ -410,6 +442,7 @@
         document.getElementById('scaleSelector').addEventListener('change', handleScaleChange);
         document.getElementById('viewModeSelector').addEventListener('change', handleViewModeChange);
         document.getElementById('countryLayerSelector').addEventListener('change', handleCountryLayerChange);
+        document.getElementById('positionStatusSelector').addEventListener('change', handlePositionStatusChange);
         document.getElementById('applyPerformanceFilters').addEventListener('click', applyPerformanceFilters);
         document.getElementById('clusterRingsToggle').addEventListener('change', (event) => {
             showClusterRings = Boolean(event.target.checked);
@@ -431,6 +464,7 @@
             job: "Aggregated location data",
             city: loc.name,
             country: "",
+            currency: loc.currency || "EUR",
             region: "",
             impressions: loc.impressions,
             ctr: loc.ctr,
@@ -473,12 +507,175 @@
         set("applyPerformanceFilters", t.applyFilter);
         set("liveCsvLabel", t.liveCsv);
         set("clusterRingsLabel", t.clusterRings);
+        set("positionStatusLabel", t.positionStatus);
+        set("positionStatusBoth", t.positionStatusBoth);
+        set("positionStatusOpen", t.positionStatusOpen);
+        set("positionStatusClosed", t.positionStatusClosed);
         const panel = document.getElementById("tablePanel");
         const collapsed = panel ? panel.classList.contains("collapsed") : true;
         setTableCollapsed(collapsed);
         updateTableSortButtons();
         updateMetricSelectorOptions();
         updateCountryLayerOptions();
+        updatePositionStatusOptions();
+    }
+
+    function normalizeStatusToken(rawStatus) {
+        return String(rawStatus || "")
+            .trim()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]/g, "");
+    }
+
+    function normalizePositionStatus(rawStatus) {
+        const token = normalizeStatusToken(rawStatus);
+        if (!token) return "other";
+
+        const openTokens = [
+            "open", "openposition", "openpost", "openvacature", "openjob", "openings", "actief", "active", "live", "running", "onbekend", "publ", "published", "publish", "veröffentlicht",
+            "veroeffentlicht", "activo", "activa", "attivo", "ouvert", "actif", "abierta", "abierto", "aperta", "aperto"
+        ];
+        const closedTokens = [
+            "closed", "close", "geschlossen", "gesloten", "inactief", "inactivo", "closedposition", "closedvacature", "closedjob", "uitgezet", "uitgesloten",
+            "arrested", "suspended", "paused", "stopped", "terminated", "cerrada", "chiuso", "chiusa", "inattiva", "inativo", "ferme", "fermé"
+        ];
+
+        for (const candidate of openTokens) {
+            if (token.includes(candidate)) return "open";
+        }
+
+        for (const candidate of closedTokens) {
+            if (token.includes(candidate)) return "closed";
+        }
+
+        if (token === "offen" || token === "otvet") return "open";
+        if (token === "gebru" || token === "buiten") return "closed";
+        return "other";
+    }
+
+    function getLocationKey(city, country) {
+        return `${normalizeStatusToken(city)}||${normalizeStatusToken(country || "")}`;
+    }
+
+    function passesPositionStatusFilter(row = {}) {
+        if (!hasOpenUploadStatuses && !hasClosedUploadStatuses) return true;
+        const status = normalizePositionStatus(row.status);
+        if (selectedPositionStatus === 'both') return true;
+        if (status === 'other') return false;
+        return status === selectedPositionStatus;
+    }
+
+    function updatePositionStatusOptions() {
+        const selector = document.getElementById('positionStatusSelector');
+        if (!selector) return;
+        const openOpt = selector.querySelector('option[value="open"]');
+        const closedOpt = selector.querySelector('option[value="closed"]');
+
+        if (openOpt) openOpt.disabled = !hasOpenUploadStatuses;
+        if (closedOpt) closedOpt.disabled = !hasClosedUploadStatuses;
+
+        if (selectedPositionStatus === 'open' && openOpt && openOpt.disabled) {
+            selectedPositionStatus = 'both';
+        }
+        if (selectedPositionStatus === 'closed' && closedOpt && closedOpt.disabled) {
+            selectedPositionStatus = 'both';
+        }
+        selector.value = selectedPositionStatus;
+    }
+
+    function setPositionFilterAvailabilityFromRows(rows) {
+        const hasRows = Array.isArray(rows) ? rows : [];
+        hasOpenUploadStatuses = hasRows.some((row) => normalizePositionStatus(row && row.status) === 'open');
+        hasClosedUploadStatuses = hasRows.some((row) => normalizePositionStatus(row && row.status) === 'closed');
+        if (!hasOpenUploadStatuses && !hasClosedUploadStatuses) {
+            selectedPositionStatus = 'both';
+        } else if (selectedPositionStatus === 'open' && !hasOpenUploadStatuses) {
+            selectedPositionStatus = 'both';
+        } else if (selectedPositionStatus === 'closed' && !hasClosedUploadStatuses) {
+            selectedPositionStatus = 'both';
+        }
+    }
+
+    function getFilteredCampaignDataSource(rows) {
+        return (rows || []).filter(passesPositionStatusFilter);
+    }
+
+    function rebuildCampaignDataForStatus() {
+        const statusRows = isIndeedUploadData ? getFilteredCampaignDataSource(uploadedJobRows) : uploadedJobRows;
+        const sourceRows = Array.isArray(statusRows) ? statusRows : [];
+        if (!sourceRows.length) {
+            return { campaignData: [], resolvedCount: 0, unresolved: [] };
+        }
+
+        const filteredCampaign = isIndeedUploadData ? aggregateIndeedRows(sourceRows) : sourceRows;
+        filteredCampaign.forEach((loc) => {
+            const cityKey = getLocationKey(loc.name, loc.country);
+            const cached = cityCoordinateByKey.get(cityKey);
+            if (cached) {
+                loc.lat = cached.lat;
+                loc.lng = cached.lng;
+            }
+        });
+
+        return { campaignData: filteredCampaign };
+    }
+
+    function syncUploadedCoordinates(rows) {
+        rows.forEach((loc) => {
+            const key = getLocationKey(loc.name, loc.country || "");
+            if (Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
+                cityCoordinateByKey.set(key, { lat: loc.lat, lng: loc.lng });
+            }
+        });
+    }
+
+    async function applyStatusFilterAndRender() {
+        const { campaignData: nextCampaign } = rebuildCampaignDataForStatus();
+        campaignData = nextCampaign;
+
+        syncUploadedCoordinates(campaignData);
+        const toResolve = campaignData.filter((loc) => !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng));
+        if (toResolve.length) {
+            setUploadStatus(`Resolving coordinates (${toResolve.length})...`);
+            const unresolved = await enrichWithCoordinates(campaignData, (done, total) => {
+                setUploadStatus(`Resolving coordinates (${done}/${total})...`);
+            });
+
+            unresolved.forEach((name, idx) => {
+                const key = getLocationKey(name, '');
+                const cached = cityCoordinateByKey.get(key);
+                if (cached) {
+                    const row = campaignData.find((loc) => normalizeStatusToken(loc.name) === normalizeStatusToken(name));
+                    if (row) {
+                        row.lat = cached.lat;
+                        row.lng = cached.lng;
+                    }
+                }
+            });
+            syncUploadedCoordinates(campaignData);
+        }
+
+        const resolvedData = campaignData.filter((loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng));
+        campaignData = resolvedData;
+        activeCityFilter = '';
+        tableSort = { key: "city", dir: "asc" };
+        updateMetricSelectorOptions();
+        updateCountryLayerOptions();
+        updatePositionStatusOptions();
+        renderMarkers();
+        renderJobsTable();
+        updateLegendBounds();
+
+        if (!campaignData.length) {
+            setUploadStatus('No rows match the selected status filter.', 'error');
+        }
+    }
+
+    function handlePositionStatusChange() {
+        selectedPositionStatus = document.getElementById('positionStatusSelector').value;
+        applyStatusFilterAndRender();
     }
 
     function clearLocationFilter() {
@@ -657,7 +854,17 @@
 
     function formatLegendValue(metricKey, value) {
         if (selectedViewMode === 'perJob' && metricUsesPerJob(metricKey)) {
+            if (metricKey === 'spend') {
+                const filteredRows = getFilteredCampaignData();
+                const currency = getSingleCurrencyForRows(filteredRows);
+                return `${formatCurrencyValue(value, currency, 2, 2)}/job`;
+            }
             return `${value.toFixed(2)}/job`;
+        }
+        if (metricKey === 'spend') {
+            const filteredRows = getFilteredCampaignData();
+            const currency = getSingleCurrencyForRows(filteredRows);
+            return formatCurrencyValue(value, currency, 2, 2);
         }
         return metricConfig[metricKey].formatter(value);
     }
@@ -981,12 +1188,13 @@
         const apps = Number(location.apps || 0);
         const applyStarts = Number(location.applyStarts != null ? location.applyStarts : apps);
         const spend = Number(location.spend || 0);
+        const currency = normalizeCurrencyCode(location.currency || '', location.country || '');
         const ctr = impressions > 0 ? clicks / impressions : 0;
         const asr = clicks > 0 ? applyStarts / clicks : 0;
         const acr = applyStarts > 0 ? apps / applyStarts : 0;
         const trafficIntent = ctr * asr;
         const cpa = apps > 0 ? spend / apps : Number(location.cpa || 0);
-        return { ...location, impressions, clicks, apps, applyStarts, spend, ctr, asr, acr, trafficIntent, cpa };
+        return { ...location, currency, impressions, clicks, apps, applyStarts, spend, ctr, asr, acr, trafficIntent, cpa };
     }
 
     function updateLegendBounds() {
@@ -1028,11 +1236,14 @@
             const impressionsLabel = perJobMode ? 'Impressions/job' : 'Impressions';
             const clicksLabel = perJobMode ? 'Clicks/job' : 'Clicks';
             const spendLabel = perJobMode ? 'Spend/job' : 'Spend';
+            const currencyCode = loc.currency || inferCurrencyFromCountry(loc.country || '');
             const appValue = perJobMode ? normalizeByJobs(loc.apps, loc.jobs).toFixed(2) : loc.apps;
             const applyStartValue = perJobMode ? normalizeByJobs(loc.applyStarts, loc.jobs).toFixed(2) : loc.applyStarts;
             const impressionsValue = perJobMode ? normalizeByJobs(loc.impressions, loc.jobs).toFixed(2) : loc.impressions.toLocaleString();
             const clicksValue = perJobMode ? normalizeByJobs(loc.clicks, loc.jobs).toFixed(2) : loc.clicks;
-            const spendValue = perJobMode ? normalizeByJobs(loc.spend, loc.jobs).toFixed(2) : loc.spend.toFixed(2);
+            const spendValueRaw = perJobMode ? normalizeByJobs(loc.spend, loc.jobs) : loc.spend;
+            const spendValue = formatCurrencyValue(spendValueRaw, currencyCode, 2, 2);
+            const cpaValue = formatCurrencyValue(loc.cpa || 0, currencyCode, 2, 2);
             const marker = L.circleMarker([loc.lat, loc.lng], {
                 radius: 8,
                 fillColor: markerColor,
@@ -1053,9 +1264,9 @@
                         <div class="popup-metric"><div class="popup-label">CTR</div><div class="popup-value">${(loc.ctr * 100).toFixed(2)}%</div></div>
                         <div class="popup-metric"><div class="popup-label">ASR</div><div class="popup-value">${(loc.asr * 100).toFixed(2)}%</div></div>
                         <div class="popup-metric"><div class="popup-label">Traffic intent</div><div class="popup-value">${(loc.trafficIntent * 100).toFixed(2)}%</div></div>
-                        <div class="popup-metric"><div class="popup-label">Cost per application</div><div class="popup-value">€${loc.cpa.toFixed(2)}</div></div>
+                        <div class="popup-metric"><div class="popup-label">Cost per application</div><div class="popup-value">${cpaValue}</div></div>
                         <div class="popup-metric"><div class="popup-label">Jobs</div><div class="popup-value">${loc.jobs}</div></div>
-                        <div class="popup-metric"><div class="popup-label">${spendLabel}</div><div class="popup-value">€${spendValue}</div></div>
+                        <div class="popup-metric"><div class="popup-label">${spendLabel}</div><div class="popup-value">${spendValue}</div></div>
                     </div>
                 </div>
             `;
@@ -1112,6 +1323,9 @@
             belgium: 'BE',
             belgie: 'BE',
             belgique: 'BE',
+            austria: 'AT',
+            osterreich: 'AT',
+            österreich: 'AT',
             unitedkingdom: 'GB',
             uk: 'GB',
             greatbritain: 'GB',
@@ -1187,6 +1401,7 @@
     function visibleTableRows() {
         const baseRows = uploadedJobRows.filter((row) => {
             if (!passesPerformanceFilter(row)) return false;
+            if (!passesPositionStatusFilter(row)) return false;
             if (selectedCountryLayer === 'all') return true;
             return getRowCountryKey(row) === selectedCountryLayer;
         });
@@ -1248,7 +1463,7 @@
                 <td>${(Number(row.acr || 0) * 100).toFixed(2)}%</td>
                 <td>${Number(row.applications || 0).toLocaleString()}</td>
                 <td>${(Number(row.trafficIntent || 0) * 100).toFixed(2)}%</td>
-                <td>€${Number(row.spend || 0).toFixed(2)}</td>
+                <td>${formatCurrencyValue(Number(row.spend || 0), row.currency || inferCurrencyFromCountry(row.country || ''), 2, 2)}</td>
                 <td>${escapeHtml(row.status || "-")}</td>
             </tr>
         `).join('');
@@ -1264,10 +1479,78 @@
             .replace(/[^a-z0-9]/g, '');
     }
 
+    function inferCurrencyFromCountry(countryRaw) {
+        const code = toIsoCountryCode(countryRaw || '');
+        return countryCurrencyMap[code] || '';
+    }
+
+    function normalizeCurrencyCode(rawCurrency, countryRaw = '') {
+        const raw = String(rawCurrency || '').trim();
+        if (!raw) return inferCurrencyFromCountry(countryRaw);
+        const upper = raw.toUpperCase();
+        if (/^[A-Z]{3}$/.test(upper)) return upper;
+        const token = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (token.includes('usd') || token.includes('dollar')) return 'USD';
+        if (token.includes('eur') || token.includes('euro')) return 'EUR';
+        if (token.includes('gbp') || token.includes('pound') || token.includes('sterling')) return 'GBP';
+        if (token.includes('chf') || token.includes('swiss') || token.includes('franc')) return 'CHF';
+        if (token.includes('cad')) return 'CAD';
+        if (token.includes('aud')) return 'AUD';
+        if (token.includes('nzd')) return 'NZD';
+        if (token.includes('jpy') || token.includes('yen')) return 'JPY';
+        if (token.includes('sek')) return 'SEK';
+        if (token.includes('nok')) return 'NOK';
+        if (token.includes('dkk')) return 'DKK';
+        if (token.includes('pln')) return 'PLN';
+        if (token.includes('czk')) return 'CZK';
+        if (token.includes('huf')) return 'HUF';
+        if (token.includes('ron')) return 'RON';
+        if (token.includes('bgn')) return 'BGN';
+        if (token.includes('€')) return 'EUR';
+        if (token.includes('£')) return 'GBP';
+        if (token.includes('$')) return inferCurrencyFromCountry(countryRaw) || 'USD';
+        return inferCurrencyFromCountry(countryRaw);
+    }
+
+    function formatCurrencyValue(value, currencyCode, minimumFractionDigits = 2, maximumFractionDigits = 2) {
+        const amount = Number(value || 0);
+        const code = String(currencyCode || '').trim().toUpperCase();
+        if (!code) {
+            return amount.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits });
+        }
+        try {
+            return new Intl.NumberFormat(undefined, {
+                style: 'currency',
+                currency: code,
+                minimumFractionDigits,
+                maximumFractionDigits
+            }).format(amount);
+        } catch {
+            return `${code} ${amount.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits })}`;
+        }
+    }
+
+    function getSingleCurrencyForRows(rows) {
+        const unique = Array.from(new Set((rows || []).map((row) => String((row && row.currency) || '').trim().toUpperCase()).filter(Boolean)));
+        if (unique.length === 1) return unique[0];
+        return '';
+    }
+
     function parseNumber(value, fallback = 0) {
-        const cleaned = String(value || '').replace(',', '.').trim();
+        const text = String(value || '').trim();
+        if (!text) return fallback;
+        const direct = Number(text.replace(/[%\s]/g, '').replace(/,/g, ''));
+        if (Number.isFinite(direct)) return direct;
+        const cleaned = text
+            .replace(/[^\d,.-]/g, '')
+            .replace(/\s/g, '');
         if (!cleaned) return fallback;
-        const parsed = Number(cleaned);
+        const lastComma = cleaned.lastIndexOf(',');
+        const lastDot = cleaned.lastIndexOf('.');
+        const normalized = lastComma > lastDot
+            ? cleaned.replace(/\./g, '').replace(',', '.')
+            : cleaned.replace(/,/g, '');
+        const parsed = Number(normalized);
         return Number.isFinite(parsed) ? parsed : fallback;
     }
 
@@ -1300,6 +1583,12 @@
                 name: String(name).trim(),
                 lat,
                 lng,
+                country: String(getField(row, ['country', 'land', 'pays', 'paese', 'pais'], false) || '').trim(),
+                currency: normalizeCurrencyCode(
+                    getField(row, ['currency', 'currencycode', 'valuta', 'waehrung', 'wahrung', 'devise', 'moneda'], false) ||
+                    getField(row, ['spend', 'cost'], false),
+                    getField(row, ['country', 'land', 'pays', 'paese', 'pais'], false)
+                ),
                 apps: parseNumber(getField(row, ['apps', 'applications', 'applies']), 0),
                 impressions: parseNumber(getField(row, ['impressions', 'views']), 0),
                 clicks: parseNumber(getField(row, ['clicks']), 0),
@@ -1346,6 +1635,11 @@
                 job: String(getField(row, ['job', 'vacature', 'stelle', 'emploi', 'annuncio', 'empleo'], false) || 'Unknown job').trim(),
                 city: String(cityRaw).trim(),
                 country,
+                currency: normalizeCurrencyCode(
+                    getField(row, ['currency', 'currencycode', 'valuta', 'waehrung', 'wahrung', 'devise', 'moneda'], false) ||
+                    getField(row, ['spend', 'besteding', 'ausgaben', 'depenses', 'spesa', 'gasto'], false),
+                    country
+                ),
                 region,
                 lastUpdated,
                 impressions,
@@ -1373,6 +1667,7 @@
                 byCity.set(key, {
                     name: job.city,
                     country: job.country,
+                    currency: job.currency || inferCurrencyFromCountry(job.country || ''),
                     region: job.region,
                     lat: NaN,
                     lng: NaN,
@@ -1392,6 +1687,7 @@
             entry.clicks += job.clicks;
             entry.spend += job.spend;
             entry.jobs += 1;
+            if (!entry.currency) entry.currency = job.currency || inferCurrencyFromCountry(job.country || '');
         });
 
         const aggregated = Array.from(byCity.values()).map((entry) => {
@@ -1526,6 +1822,7 @@
         const hasCountry = hasAnyHeader(headers, ['country', 'land', 'pays', 'paese', 'pais']);
         const hasImpressions = hasAnyHeader(headers, ['impressions', 'impressies', 'visualizzazioni', 'impresiones']);
         const isIndeedStructure = hasCity && hasCountry && hasImpressions;
+        isIndeedUploadData = Boolean(isIndeedStructure);
         let parsed = [];
         let skipped = [];
 
@@ -1533,7 +1830,8 @@
             const indeedParsed = parseIndeedJobRows(rows);
             skipped = indeedParsed.skipped;
             uploadedJobRows = indeedParsed.parsed;
-            parsed = aggregateIndeedRows(uploadedJobRows);
+            setPositionFilterAvailabilityFromRows(uploadedJobRows);
+            parsed = rebuildCampaignDataForStatus().campaignData;
         } else {
             const manualParsed = parseCampaignRows(rows);
             parsed = manualParsed.parsed.map(enrichLocationMetrics);
@@ -1552,10 +1850,17 @@
                     asr: loc.asr || 0,
                     trafficIntent: loc.trafficIntent || 0,
                     spend: loc.spend || 0,
+                    currency: loc.currency || inferCurrencyFromCountry(loc.country || ''),
                     status: "-",
                     lastUpdated: ""
                 }));
+            hasOpenUploadStatuses = false;
+            hasClosedUploadStatuses = false;
+            selectedPositionStatus = 'both';
+            parsed = parsed.map((loc) => loc);
         }
+
+        updatePositionStatusOptions();
 
         if (!parsed.length || !uploadedJobRows.length) {
             setUploadStatus('No valid rows found. Required fields: City and Country (Indeed export) or name/location + lat/lng.', 'error');
