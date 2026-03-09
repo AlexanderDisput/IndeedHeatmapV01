@@ -450,6 +450,12 @@
             <select id="countryFilterSelector">
               <option value="__all__">All countries</option>
             </select>
+            <label for="positionStatusSelector">Position status</label>
+            <select id="positionStatusSelector">
+              <option value="both">Both</option>
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+            </select>
             <label id="graphMetricLabel" for="costMetricSelector">Graph cost metric</label>
             <select id="costMetricSelector">
               <option value="cpas">CPAS</option>
@@ -494,12 +500,12 @@
               <thead>
                 <tr>
                   <th><button id="nameHeaderBtn" class="sort-btn" data-sort-key="name">City / Job</button></th>
-                  <th><button id="spendHeaderBtn" class="sort-btn" data-sort-key="spend">Spend ($)</button></th>
+                  <th><button id="spendHeaderBtn" class="sort-btn" data-sort-key="spend">Spend</button></th>
                   <th><button id="applyStartsHeaderBtn" class="sort-btn" data-sort-key="applyStarts">Apply starts</button></th>
                   <th id="applicationsHeader"><button id="applicationsHeaderBtn" class="sort-btn" data-sort-key="applications">Applications</button></th>
                   <th><button id="jobsHeaderBtn" class="sort-btn" data-sort-key="jobs">Jobs</button></th>
-                  <th><button id="cpasHeaderBtn" class="sort-btn" data-sort-key="cpas">CPAS ($)</button></th>
-                  <th id="cpaHeader"><button id="cpaHeaderBtn" class="sort-btn" data-sort-key="cpa">CPA ($)</button></th>
+                  <th><button id="cpasHeaderBtn" class="sort-btn" data-sort-key="cpas">CPAS</button></th>
+                  <th id="cpaHeader"><button id="cpaHeaderBtn" class="sort-btn" data-sort-key="cpa">CPA</button></th>
                 </tr>
               </thead>
               <tbody id="table-body"></tbody>
@@ -538,6 +544,11 @@
       const SHARED_UPLOAD_MESSAGE = "shared-csv-upload";
       const UI_LANGUAGE_MESSAGE = "ui-language-changed";
       const gradientStops = { low: "#d93025", mid: "#f6c343", high: "#1a9850" };
+      const countryCurrencyMap = {
+        US: "USD", GB: "GBP", UK: "GBP", IE: "EUR", DE: "EUR", FR: "EUR", NL: "EUR", ES: "EUR", IT: "EUR", BE: "EUR",
+        CH: "CHF", AT: "EUR", LU: "EUR", PT: "EUR", SE: "SEK", NO: "NOK", DK: "DKK", PL: "PLN", CZ: "CZK", HU: "HUF",
+        RO: "RON", BG: "BGN", HR: "EUR", SI: "EUR", SK: "EUR", CA: "CAD", AU: "AUD", NZ: "NZD", JP: "JPY"
+      };
       let currentLanguage = "en";
       let expandedCities = new Set();
       let lastRawCityData = [];
@@ -560,6 +571,13 @@
       let selectedCityTableFilter = "";
       let selectedCityCountryFilter = "";
       let selectedCountryFilter = "__all__";
+      let selectedPositionStatus = "both";
+      let hasOpenUploadStatuses = false;
+      let hasClosedUploadStatuses = false;
+      let lastUploadRawRows = null;
+      let lastUploadRawCsvText = "";
+      let lastUploadSourceLabel = "";
+      let activeCurrencyContext = { mixed: false, currencyCode: "USD" };
       const uiText = {
         en: { title: "Budget Efficiency (CPA/CPAS vs Volume)", subtitle: "X = Volume (Applications or Apply starts), Y = Cost (CPA or CPAS), bubble size = Jobs, color = cost percentile.", graphMetric: "Graph cost metric", min: "Min", max: "Max", apply: "Apply", resetZoom: "Reset Zoom", legend: "Higher on the Y-axis means higher cost.", cpaBtn: "CPA Above Median", cpasBtn: "CPAS Above Median", exportBtn: "Export", defaultStatus: "Showing built-in sample data. Upload a CSV to replace it." },
         de: { title: "Budget-Effizienz (CPA/CPAS vs Volumen)", subtitle: "X = Volumen (Bewerbungen oder Starts), Y = Kosten (CPA oder CPAS), Blasengröße = Jobs, Farbe = Kosten-Perzentil.", graphMetric: "Kostenmetrik", min: "Min", max: "Max", apply: "Anwenden", resetZoom: "Zoom zurücksetzen", legend: "Höher auf der Y-Achse bedeutet höhere Kosten.", cpaBtn: "CPA über Median", cpasBtn: "CPAS über Median", exportBtn: "Export", defaultStatus: "Beispieldaten werden angezeigt. CSV hochladen zum Ersetzen." },
@@ -570,59 +588,59 @@
       };
       const defaultTableLabels = {
         name: "City / Job",
-        spend: "Spend ($)",
+        spend: "Spend",
         applyStarts: "Apply starts",
         applications: "Applications",
         jobs: "Jobs",
-        cpas: "CPAS ($)",
-        cpa: "CPA ($)"
+        cpas: "CPAS",
+        cpa: "CPA"
       };
       const tableLabelsByLanguage = {
         en: { ...defaultTableLabels },
         de: {
           name: "Stadt / Job",
-          spend: "Ausgaben ($)",
+          spend: "Ausgaben",
           applyStarts: "Bewerbungsstarts",
           applications: "Bewerbungen",
           jobs: "Jobs",
-          cpas: "CPAS ($)",
-          cpa: "CPA ($)"
+          cpas: "CPAS",
+          cpa: "CPA"
         },
         fr: {
           name: "Ville / Poste",
-          spend: "Dépenses ($)",
+          spend: "Dépenses",
           applyStarts: "Débuts de candidature",
           applications: "Candidatures",
           jobs: "Jobs",
-          cpas: "CPAS ($)",
-          cpa: "CPA ($)"
+          cpas: "CPAS",
+          cpa: "CPA"
         },
         es: {
           name: "Ciudad / Puesto",
-          spend: "Gasto ($)",
+          spend: "Gasto",
           applyStarts: "Inicios de solicitud",
           applications: "Solicitudes",
           jobs: "Empleos",
-          cpas: "CPAS ($)",
-          cpa: "CPA ($)"
+          cpas: "CPAS",
+          cpa: "CPA"
         },
         it: {
           name: "Città / Ruolo",
-          spend: "Spesa ($)",
+          spend: "Spesa",
           applyStarts: "Avvii candidatura",
           applications: "Candidature",
           jobs: "Lavori",
-          cpas: "CPAS ($)",
-          cpa: "CPA ($)"
+          cpas: "CPAS",
+          cpa: "CPA"
         },
         nl: {
           name: "Plaats / Vacature",
-          spend: "Uitgaven ($)",
+          spend: "Uitgaven",
           applyStarts: "Gestarte sollicitaties",
           applications: "Sollicitaties",
           jobs: "Jobs",
-          cpas: "CPAS ($)",
-          cpa: "CPA ($)"
+          cpas: "CPAS",
+          cpa: "CPA"
         }
       };
       const exportHeaderI18n = {
@@ -682,9 +700,142 @@
         if (value == null) return null;
         const trimmed = String(value).trim();
         if (!trimmed) return null;
-        const normalized = trimmed.replace(/[$,%\s]/g, "").replace(/,/g, "");
+        const direct = Number(trimmed.replace(/[%\s]/g, "").replace(/,/g, ""));
+        if (Number.isFinite(direct)) return direct;
+        const cleaned = trimmed
+          .replace(/[^\d,.-]/g, "")
+          .replace(/\s/g, "");
+        if (!cleaned) return null;
+        const lastComma = cleaned.lastIndexOf(",");
+        const lastDot = cleaned.lastIndexOf(".");
+        let normalized = cleaned;
+        if (lastComma > lastDot) {
+          normalized = cleaned.replace(/\./g, "").replace(",", ".");
+        } else {
+          normalized = cleaned.replace(/,/g, "");
+        }
         const parsed = Number(normalized);
         return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      function inferCurrencyFromCountry(countryRaw) {
+        const raw = String(countryRaw || "").trim();
+        if (!raw) return "";
+        const key = raw.toUpperCase();
+        if (countryCurrencyMap[key]) return countryCurrencyMap[key];
+        const token = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
+        const nameToCode = {
+          unitedstates: "US", usa: "US", us: "US",
+          unitedkingdom: "GB", uk: "GB", greatbritain: "GB", britain: "GB", england: "GB",
+          germany: "DE", deutschland: "DE",
+          france: "FR", italy: "IT", italia: "IT", spain: "ES", espana: "ES", netherlands: "NL", nederland: "NL",
+          belgium: "BE", belgique: "BE", belgie: "BE", ireland: "IE", switzerland: "CH", schweiz: "CH", suisse: "CH",
+          austria: "AT", osterreich: "AT", österreich: "AT"
+        };
+        const iso = nameToCode[token] || "";
+        return iso ? (countryCurrencyMap[iso] || "") : "";
+      }
+
+      function normalizeCurrencyCode(rawCurrency, countryRaw = "") {
+        const raw = String(rawCurrency || "").trim();
+        if (!raw) return inferCurrencyFromCountry(countryRaw);
+        const upper = raw.toUpperCase();
+        if (/^[A-Z]{3}$/.test(upper)) return upper;
+        const token = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (token.includes("usd") || token.includes("dollar")) return "USD";
+        if (token.includes("eur") || token.includes("euro")) return "EUR";
+        if (token.includes("gbp") || token.includes("pound") || token.includes("sterling")) return "GBP";
+        if (token.includes("chf") || token.includes("swiss") || token.includes("franc")) return "CHF";
+        if (token.includes("cad")) return "CAD";
+        if (token.includes("aud")) return "AUD";
+        if (token.includes("nzd")) return "NZD";
+        if (token.includes("jpy") || token.includes("yen")) return "JPY";
+        if (token.includes("sek")) return "SEK";
+        if (token.includes("nok")) return "NOK";
+        if (token.includes("dkk")) return "DKK";
+        if (token.includes("pln")) return "PLN";
+        if (token.includes("czk")) return "CZK";
+        if (token.includes("huf")) return "HUF";
+        if (token.includes("ron")) return "RON";
+        if (token.includes("bgn")) return "BGN";
+        if (token.includes("€") || token.includes("eur")) return "EUR";
+        if (token.includes("$")) return inferCurrencyFromCountry(countryRaw) || "USD";
+        if (token.includes("£")) return "GBP";
+        if (token.includes("₣") || token.includes("fr")) return "CHF";
+        return inferCurrencyFromCountry(countryRaw);
+      }
+
+      function formatCurrencyValue(value, currencyCode, minimumFractionDigits = 2, maximumFractionDigits = 2) {
+        const amount = Number(value || 0);
+        const code = String(currencyCode || "").trim().toUpperCase();
+        if (!code) return amount.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits });
+        try {
+          return new Intl.NumberFormat(undefined, {
+            style: "currency",
+            currency: code,
+            minimumFractionDigits,
+            maximumFractionDigits
+          }).format(amount);
+        } catch {
+          return `${code} ${amount.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits })}`;
+        }
+      }
+
+      function getCurrencyContext(rows) {
+        const currencies = Array.from(
+          new Set(
+            (Array.isArray(rows) ? rows : [])
+              .map((row) => String(row.currency || "").trim().toUpperCase())
+              .filter(Boolean)
+          )
+        );
+        if (!currencies.length) return { mixed: false, currencyCode: "" };
+        if (currencies.length === 1) return { mixed: false, currencyCode: currencies[0] };
+        return { mixed: true, currencyCode: "" };
+      }
+
+      function normalizePositionStatus(value) {
+        const token = String(value || "")
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z]/g, "");
+        if (!token) return "unknown";
+        const openTokens = [
+          "open", "offen", "ouvert", "abierta", "aperta", "active", "actief", "activo", "attiva", "running", "live", "published", "publicada", "verooffentlicht", "veroefentlicht"
+        ];
+        const closedTokens = [
+          "closed", "gesloten", "geschlossen", "ferme", "cerrada", "chiusa", "inactive", "inactief", "inactivo", "nonactive", "paused"
+        ];
+        if (openTokens.some((candidate) => token.includes(candidate))) return "open";
+        if (closedTokens.some((candidate) => token.includes(candidate))) return "closed";
+        return "unknown";
+      }
+
+      function passesPositionStatusFilter(row = {}) {
+        if (selectedPositionStatus === "both") return true;
+        return normalizePositionStatus(row.status) === selectedPositionStatus;
+      }
+
+      function setPositionFilterAvailabilityFromRows(rows) {
+        const list = Array.isArray(rows) ? rows : [];
+        hasOpenUploadStatuses = list.some((row) => normalizePositionStatus(row.status) === "open");
+        hasClosedUploadStatuses = list.some((row) => normalizePositionStatus(row.status) === "closed");
+        if (selectedPositionStatus === "open" && !hasOpenUploadStatuses) selectedPositionStatus = "both";
+        if (selectedPositionStatus === "closed" && !hasClosedUploadStatuses) selectedPositionStatus = "both";
+      }
+
+      function updatePositionStatusOptions() {
+        const selector = document.getElementById("positionStatusSelector");
+        if (!selector) return;
+        const openOpt = selector.querySelector('option[value="open"]');
+        const closedOpt = selector.querySelector('option[value="closed"]');
+        if (openOpt) openOpt.disabled = !hasOpenUploadStatuses;
+        if (closedOpt) closedOpt.disabled = !hasClosedUploadStatuses;
+        if (selectedPositionStatus === "open" && openOpt && openOpt.disabled) selectedPositionStatus = "both";
+        if (selectedPositionStatus === "closed" && closedOpt && closedOpt.disabled) selectedPositionStatus = "both";
+        selector.value = selectedPositionStatus;
       }
 
       function escapeHtml(value) {
@@ -787,9 +938,14 @@
         const graphEl = document.getElementById("graphMedianNotice");
         const tableEl = document.getElementById("tableMedianNotice");
         const parts = [];
-        if (showApplicationsMetrics && Number.isFinite(medianJobCPA)) parts.push(`Median CPA: $${medianJobCPA.toFixed(2)}`);
-        if (Number.isFinite(medianJobCPAS)) parts.push(`Median CPAS: $${medianJobCPAS.toFixed(2)}`);
-        const message = parts.length ? `${parts.join(" | ")} (excluding 0 values)` : "";
+        if (showApplicationsMetrics && Number.isFinite(medianJobCPA)) {
+          parts.push(`Median CPA: ${formatCurrencyValue(medianJobCPA, activeCurrencyContext.currencyCode || "", 2, 2)}`);
+        }
+        if (Number.isFinite(medianJobCPAS)) {
+          parts.push(`Median CPAS: ${formatCurrencyValue(medianJobCPAS, activeCurrencyContext.currencyCode || "", 2, 2)}`);
+        }
+        const suffix = activeCurrencyContext.mixed ? " (mixed currencies, excluding 0 values)" : " (excluding 0 values)";
+        const message = parts.length ? `${parts.join(" | ")}${suffix}` : "";
         if (graphEl) graphEl.textContent = message;
         if (tableEl) tableEl.textContent = message;
       }
@@ -1016,9 +1172,22 @@
         ]);
         const jobMeta = findHeaderMeta(headers, rawHeaders, ["job", "vacature", "stelle", "emploi", "annuncio", "empleo", "functie", "ruolo"]);
         const countryMeta = findHeaderMeta(headers, rawHeaders, ["country", "land", "pays", "paese", "pais"]);
+        const currencyMeta = findHeaderMeta(headers, rawHeaders, ["currency", "currency code", "valuta", "waehrung", "wahrung", "devise", "moneda"]);
+        const statusMeta = findHeaderMeta(headers, rawHeaders, [
+          "status",
+          "job status",
+          "jobstatus",
+          "vacaturestatus",
+          "status der stellenanzeige",
+          "statut de l'emploi",
+          "estado del empleo",
+          "stato dell'annuncio"
+        ]);
         const idx = {
           city: cityMeta.idx,
           country: countryMeta.idx,
+          currency: currencyMeta.idx,
+          status: statusMeta.idx,
           spend: spendMeta.idx,
           applies: appliesMeta.idx,
           applyStarts: applyStartsMeta.idx,
@@ -1032,8 +1201,14 @@
         }
 
         const rawRows = rows.slice(1).map((cells) => ({
+          spendRaw: idx.spend >= 0 ? (cells[idx.spend] || "") : "",
           city: (cells[idx.city] || "").trim(),
           country: idx.country >= 0 ? ((cells[idx.country] || "").trim().toUpperCase() || "N/A") : "N/A",
+          currency: normalizeCurrencyCode(
+            idx.currency >= 0 ? (cells[idx.currency] || "").trim() : (idx.spend >= 0 ? (cells[idx.spend] || "").trim() : ""),
+            idx.country >= 0 ? (cells[idx.country] || "").trim() : ""
+          ),
+          status: idx.status >= 0 ? (cells[idx.status] || "").trim() : "",
           spend: parseNumber(cells[idx.spend]),
           applies: idx.applies >= 0 ? parseNumber(cells[idx.applies]) : null,
           applyStarts: idx.applyStarts >= 0 ? parseNumber(cells[idx.applyStarts]) : null,
@@ -1052,15 +1227,22 @@
           const cpasValue = cpasFromCell != null ? cpasFromCell : applyStarts > 0 ? (spend ?? 0) / applyStarts : null;
           const cityValue = idx.city >= 0 ? (cells[idx.city] || "").trim() : "";
           const countryValue = idx.country >= 0 ? ((cells[idx.country] || "").trim().toUpperCase() || "N/A") : "N/A";
-          return { cells, cpaValue, cpasValue, cityValue, countryValue };
+          const currencyValue = normalizeCurrencyCode(idx.currency >= 0 ? (cells[idx.currency] || "").trim() : "", countryValue);
+          const statusValue = idx.status >= 0 ? (cells[idx.status] || "").trim() : "";
+          return { cells, cpaValue, cpasValue, cityValue, countryValue, currencyValue, statusValue };
         });
 
-        const hasPositiveApplies = rawRows.some((r) => r.applies != null && r.applies > 0);
-        const hasPositiveApplyStarts = rawRows.some((r) => r.applyStarts != null && r.applyStarts > 0);
+        lastUploadRawRows = rawRows.slice();
+        setPositionFilterAvailabilityFromRows(rawRows);
+        updatePositionStatusOptions();
+        const scopedRows = rawRows.filter((row) => passesPositionStatusFilter(row));
+
+        const hasPositiveApplies = scopedRows.some((r) => r.applies != null && r.applies > 0);
+        const hasPositiveApplyStarts = scopedRows.some((r) => r.applyStarts != null && r.applyStarts > 0);
         const defaultMetric = hasPositiveApplies || !hasPositiveApplyStarts ? "applies" : "applyStarts";
         const cityMap = new Map();
 
-        rawRows.forEach((rowData, rowIdx) => {
+        scopedRows.forEach((rowData, rowIdx) => {
           if (!rowData.city) return;
           const spend = rowData.spend ?? 0;
           const applies = rowData.applies ?? 0;
@@ -1071,6 +1253,7 @@
           if (!cityMap.has(cityKey)) {
             cityMap.set(cityKey, {
               country,
+              currency: rowData.currency || inferCurrencyFromCountry(country),
               city: rowData.city,
               spend: 0,
               applicationsTotal: 0,
@@ -1105,6 +1288,7 @@
           if (!current.jobMap.has(jobLabel)) {
             current.jobMap.set(jobLabel, {
               jobTitle,
+              currency: rowData.currency || inferCurrencyFromCountry(country),
               spend: 0,
               applicationsTotal: 0,
               applyStartsTotal: 0,
@@ -1142,6 +1326,7 @@
                 const primaryCost = defaultMetric === "applies" ? jobCpa : jobCpas;
                 return {
                   jobTitle: jobData.jobTitle,
+                  currency: jobData.currency || d.currency || inferCurrencyFromCountry(d.country || ""),
                   spend: jobData.spend,
                   applicationsTotal: jobData.applicationsTotal,
                   applyStartsTotal: jobData.applyStartsTotal,
@@ -1161,6 +1346,7 @@
             const primaryCost = defaultMetric === "applies" ? cityCpa : cityCpas;
             return {
               country: d.country || "N/A",
+              currency: d.currency || inferCurrencyFromCountry(d.country || ""),
               city: d.city,
               spend: d.spend,
               applicationsTotal: d.applicationsTotal,
@@ -1177,11 +1363,10 @@
           .filter((d) => d.spend > 0 || d.applicationsTotal > 0 || d.applyStartsTotal > 0)
           .sort((a, b) => b.spend - a.spend);
 
-        if (!cityData.length) throw new Error("No usable city rows found after parsing CSV.");
-
         const metricLabel = defaultMetric === "applies" ? "Primary volume = Applications" : "Primary volume = Apply starts";
         const preferredCostMetric = defaultMetric === "applies" ? "cpa" : "cpas";
-        return { cityData, metricLabel, preferredCostMetric, exportMeta: { headers: rawHeaders, rows: exportRows } };
+        const scopedExportRows = exportRows.filter((row) => passesPositionStatusFilter({ status: row.statusValue }));
+        return { cityData, metricLabel, preferredCostMetric, exportMeta: { headers: rawHeaders, rows: scopedExportRows } };
       }
 
       function hexToRgb(hex) {
@@ -1279,14 +1464,15 @@
 
       function showTooltip(point, x, y, metricName, volumeLabel) {
         const chartCost = Number.isFinite(point.chartCost) ? point.chartCost : point.primaryCost ?? point.cpa ?? 0;
+        const rowCurrency = point.currency || inferCurrencyFromCountry(point.country || "");
         tooltipEl.innerHTML = [
           `<strong>${point.city}</strong>`,
           `Country: ${point.country || "N/A"}`,
-          `Spend: $${point.spend.toLocaleString()}`,
+          `Spend: ${formatCurrencyValue(point.spend || 0, rowCurrency, 2, 2)}`,
           `Apply starts: ${Math.round(point.applyStartsTotal ?? 0).toLocaleString()}`,
           `Applications: ${Math.round(point.applicationsTotal ?? 0).toLocaleString()}`,
           `Jobs: ${point.jobs.toLocaleString()}`,
-          `${metricName}: $${chartCost.toFixed(2)}`,
+          `${metricName}: ${formatCurrencyValue(chartCost, rowCurrency, 2, 2)}`,
           `${metricName} percentile: ${Math.round(point.cpaPercentile)}th`
         ].join("<br/>");
         tooltipEl.style.left = `${x}px`;
@@ -1694,15 +1880,16 @@
           const applicationsCell = showApplicationsMetrics
             ? `<td>${Math.round(cityRow.applicationsTotal || 0).toLocaleString()}</td>`
             : "";
-          const cpaCell = showApplicationsMetrics ? `<td>$${(cityRow.cpa || 0).toFixed(2)}</td>` : "";
+          const cityCurrency = cityRow.currency || inferCurrencyFromCountry(cityRow.country || "");
+          const cpaCell = showApplicationsMetrics ? `<td>${formatCurrencyValue(cityRow.cpa || 0, cityCurrency, 2, 2)}</td>` : "";
 
           tr.innerHTML = `
             <td>${cityLabel}</td>
-            <td>$${cityRow.spend.toLocaleString()}</td>
+            <td>${formatCurrencyValue(cityRow.spend || 0, cityCurrency, 2, 2)}</td>
             <td>${Math.round(cityRow.applyStartsTotal || 0).toLocaleString()}</td>
             ${applicationsCell}
             <td>${cityRow.jobs.toLocaleString()}</td>
-            <td>$${(cityRow.cpas || 0).toFixed(2)}</td>
+            <td>${formatCurrencyValue(cityRow.cpas || 0, cityCurrency, 2, 2)}</td>
             ${cpaCell}
           `;
 
@@ -1763,14 +1950,15 @@
             const jobApplicationsCell = showApplicationsMetrics
               ? `<td>${Math.round(jobRow.applicationsTotal || 0).toLocaleString()}</td>`
               : "";
-            const jobCpaCell = showApplicationsMetrics ? `<td>$${(jobRow.cpa || 0).toFixed(2)}</td>` : "";
+            const jobCurrency = jobRow.currency || cityRow.currency || inferCurrencyFromCountry(cityRow.country || "");
+            const jobCpaCell = showApplicationsMetrics ? `<td>${formatCurrencyValue(jobRow.cpa || 0, jobCurrency, 2, 2)}</td>` : "";
             jobTr.innerHTML = `
               <td>${escapeHtml(jobRow.jobTitle)}</td>
-              <td>$${jobRow.spend.toLocaleString()}</td>
+              <td>${formatCurrencyValue(jobRow.spend || 0, jobCurrency, 2, 2)}</td>
               <td>${Math.round(jobRow.applyStartsTotal || 0).toLocaleString()}</td>
               ${jobApplicationsCell}
               <td>-</td>
-              <td>$${(jobRow.cpas || 0).toFixed(2)}</td>
+              <td>${formatCurrencyValue(jobRow.cpas || 0, jobCurrency, 2, 2)}</td>
               ${jobCpaCell}
             `;
             tableBody.appendChild(jobTr);
@@ -1822,6 +2010,8 @@
           const cost = selectedCostMetric === "cpas" ? Number(d.cpas || 0) : Number(d.cpa || 0);
           return Number.isFinite(cost) && cost > 0;
         });
+        activeCurrencyContext = getCurrencyContext(graphCityData);
+        updateGraphMedianNotice();
         if (!graphCityData.length) {
           statusEl.textContent = `No non-zero ${selectedCostMetric.toUpperCase()} points to plot.`;
           buildTable(filteredCityData);
@@ -1873,14 +2063,18 @@
           activeMinCost,
           activeMaxCost,
           (v) => Math.round(v).toLocaleString(),
-          (v) => `$${v.toFixed(2)}`
+          (v) => {
+            if (activeCurrencyContext.mixed) return v.toFixed(2);
+            return formatCurrencyValue(v, activeCurrencyContext.currencyCode || "", 2, 2);
+          }
         );
         drawAxisLine(margin.left, margin.top + innerH, margin.left + innerW, margin.top + innerH);
         drawAxisLine(margin.left, margin.top, margin.left, margin.top + innerH);
         const graphMetricName = selectedCostMetric === "cpas" ? "CPAS" : "CPA";
         const volumeLabel = selectedCostMetric === "cpas" ? "Apply starts" : "Applications";
         drawText(margin.left + innerW / 2, height - 16, `${volumeLabel}`, "middle", { size: "14", weight: "600" });
-        drawText(20, margin.top + innerH / 2, `${graphMetricName} ($)`, "middle", {
+        const currencyAxisSuffix = activeCurrencyContext.mixed ? "mixed currencies" : (activeCurrencyContext.currencyCode || "currency");
+        drawText(20, margin.top + innerH / 2, `${graphMetricName} (${currencyAxisSuffix})`, "middle", {
           size: "14",
           weight: "600",
           rotate: -90
@@ -1956,6 +2150,10 @@
         } catch (error) {
           statusEl.textContent = `Could not parse CSV: ${error.message}`;
           lastUploadExportMeta = null;
+          lastUploadRawRows = null;
+          hasOpenUploadStatuses = false;
+          hasClosedUploadStatuses = false;
+          updatePositionStatusOptions();
           selectedCountryFilter = "__all__";
           updateCountryFilterOptions([]);
           setTableHeaderLabels(tableLabelsByLanguage[currentLanguage] || defaultTableLabels);
@@ -1966,6 +2164,8 @@
         const file = event.target.files && event.target.files[0];
         if (!file) return;
         const csvText = await file.text();
+        lastUploadRawCsvText = csvText;
+        lastUploadSourceLabel = file.name;
         await applyCsvText(csvText, file.name);
       }
 
@@ -1978,6 +2178,8 @@
         const data = event.data;
         if (!data) return;
         if (data.type === SHARED_UPLOAD_MESSAGE && data.payload && data.payload.text) {
+          lastUploadRawCsvText = data.payload.text;
+          lastUploadSourceLabel = `shared file ${data.payload.name || "CSV"}`;
           applyCsvText(data.payload.text, `shared file ${data.payload.name || "CSV"}`);
           return;
         }
@@ -2053,6 +2255,23 @@
         updateZoomButtonState();
         if (lastRawCityData.length) render(lastRawCityData, "Country filter updated");
       });
+      document.getElementById("positionStatusSelector").addEventListener("change", async (event) => {
+        selectedPositionStatus = event.target.value || "both";
+        selectedCityTableFilter = "";
+        selectedCityCountryFilter = "";
+        expandedCities = new Set();
+        zoomState = null;
+        hideZoomClickMenu();
+        updateZoomButtonState();
+        if (lastUploadRawCsvText) {
+          await applyCsvText(lastUploadRawCsvText, lastUploadSourceLabel || "uploaded.csv");
+          return;
+        }
+        hasOpenUploadStatuses = false;
+        hasClosedUploadStatuses = false;
+        updatePositionStatusOptions();
+        if (lastRawCityData.length) render(lastRawCityData, "Position status filter updated");
+      });
       svg.addEventListener("mousedown", startZoomBrush);
       window.addEventListener("mousemove", moveZoomBrush);
       window.addEventListener("mouseup", endZoomBrush);
@@ -2071,10 +2290,15 @@
       fileInput.addEventListener("change", handleFileSelection);
       lastRawCityData = [...sampleCityData].map((row) => ({
         ...row,
+        status: row.status || "",
+        currency: row.currency || inferCurrencyFromCountry(row.country || "US") || "USD",
         country: row.country || "N/A",
         cityKey: `${row.country || "N/A"}||${row.city}`
       }));
       medianJobFilterMode = "none";
+      hasOpenUploadStatuses = false;
+      hasClosedUploadStatuses = false;
+      updatePositionStatusOptions();
       updateCountryFilterOptions(lastRawCityData);
       setTableHeaderLabels(tableLabelsByLanguage[currentLanguage] || defaultTableLabels);
       showApplicationsMetrics = lastRawCityData.some((row) => Number(row.applicationsTotal || row.applications || 0) > 0);
